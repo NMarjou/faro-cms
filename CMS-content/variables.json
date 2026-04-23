@@ -1,0 +1,22 @@
+{
+  "sets": [
+    {
+      "name": "General",
+      "slug": "general",
+      "variables": {
+        "productName": "beqom",
+        "companyName": "beqom",
+        "passportName": "Passport",
+        "plannerName": "Planner",
+        "workbenchName": "Workbench",
+        "currentVersion": "22.0",
+        "supportEmail": "support@beqom.com"
+      }
+    },
+    {
+      "name": "Localization",
+      "slug": "localization",
+      "variables": {}
+    }
+  ]
+}

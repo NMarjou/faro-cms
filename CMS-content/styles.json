@@ -1,0 +1,10 @@
+[
+  { "name": "Figure Caption", "class": "figure-caption", "element": "p" },
+  { "name": "Interface", "class": "interface", "element": "span" },
+  { "name": "Code", "class": "code", "element": "span" },
+  { "name": "Info Date", "class": "infodate", "element": "span" },
+  { "name": "Text Green", "class": "text-green", "element": "span" },
+  { "name": "Text Red", "class": "text-red", "element": "span" },
+  { "name": "Red Paragraph", "class": "red", "element": "p" },
+  { "name": "Green Paragraph", "class": "green", "element": "p" }
+]

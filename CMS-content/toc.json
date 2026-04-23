@@ -1,0 +1,119 @@
+{
+  "categories": [
+    {
+      "name": "Help",
+      "slug": "help",
+      "description": "User guides and product documentation",
+      "sections": [
+        {
+          "name": "Passport",
+          "slug": "passport",
+          "articles": [
+            {
+              "title": "Getting Started with Passport",
+              "file": "help/passport/getting-started.mdx",
+              "slug": "getting-started-with-passport",
+              "lastModified": "2026-04-02"
+            }
+          ]
+        },
+        {
+          "name": "Planner",
+          "slug": "planner",
+          "articles": [
+            {
+              "title": "Compensation Planning Overview",
+              "file": "help/planner/compensation-planning.mdx",
+              "slug": "compensation-planning-overview"
+            }
+          ]
+        },
+        {
+          "name": "Workbench",
+          "slug": "workbench",
+          "articles": [
+            {
+              "title": "This is a test article",
+              "file": "help/workbench/this-is-a-test-article.mdx",
+              "slug": "this-is-a-test-article"
+            },
+            {
+              "title": "Data Management Basics",
+              "file": "help/workbench/data-management.mdx",
+              "slug": "data-management-basics",
+              "lastModified": "2026-04-01"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "APIs",
+      "slug": "apis",
+      "description": "API reference and integration guides",
+      "sections": [
+        {
+          "name": "Integration Hub",
+          "slug": "integration-hub",
+          "articles": [
+            {
+              "title": "Integration Hub Overview",
+              "file": "apis/integration-hub/overview.mdx",
+              "slug": "integration-hub-overview",
+              "lastModified": "2026-04-01"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Release Notes",
+      "slug": "release-notes",
+      "description": "Version history and changelogs",
+      "sections": [
+        {
+          "name": "General",
+          "slug": "general",
+          "articles": [
+            {
+              "title": "Version 22.0 Release Notes",
+              "file": "release-notes/general/v22-0.mdx",
+              "slug": "version-22-0-release-notes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Technical Administration",
+      "slug": "technical-administration",
+      "description": "System configuration and admin guides",
+      "sections": [
+        {
+          "name": "General",
+          "slug": "general",
+          "articles": [
+            {
+              "title": "Authentication Setup",
+              "file": "technical-administration/general/authentication.mdx",
+              "slug": "authentication-setup",
+              "lastModified": "2026-04-02"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Getting Started",
+      "slug": "getting-started",
+      "description": "",
+      "sections": [
+        {
+          "name": "Quick Start Guide",
+          "slug": "quick-start-guide",
+          "articles": []
+        }
+      ]
+    }
+  ]
+}

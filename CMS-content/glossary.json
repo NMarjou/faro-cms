@@ -1,0 +1,16 @@
+{
+  "terms": [
+    {
+      "term": "SSO",
+      "definition": "Single Sign-On — authentication method allowing users to log in once and access multiple systems."
+    },
+    {
+      "term": "HRIS",
+      "definition": "Human Resource Information System — software for managing employee data and HR processes."
+    },
+    {
+      "term": "KPI",
+      "definition": "Key Performance Indicator — a measurable value that demonstrates how effectively objectives are being achieved."
+    }
+  ]
+}

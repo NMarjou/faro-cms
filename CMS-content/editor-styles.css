@@ -1,0 +1,231 @@
+/* ==========================================================================
+   beqom CMS — Editor Stylesheet
+   Custom styles applied to article content in the WYSIWYG editor.
+   Selectors are automatically scoped to .ProseMirror at runtime.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Message Boxes / Callouts
+   Maps Flare .message-* classes to CMS messageBox callout types.
+   -------------------------------------------------------------------------- */
+
+/* Danger (red) */
+.message-red {
+  display: flex;
+  align-items: flex-start;
+  background-color: #fdf2f3;
+  border: 1px solid #f3b4ba;
+  border-left: 4px solid #c30014;
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 4px;
+  color: #5c1515;
+}
+
+.message-red .message-text-inner {
+  color: #5c1515;
+}
+
+.message-red ul li {
+  color: #5c1515;
+}
+
+/* Info (blue) */
+.message-blue {
+  display: flex;
+  align-items: flex-start;
+  background-color: #e0eef6;
+  border: 1px solid #bedaea;
+  border-left: 4px solid #0c6497;
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 4px;
+  color: #04334e;
+}
+
+.message-blue .message-text-inner {
+  color: #04334e;
+}
+
+.message-blue ul li {
+  color: #04334e;
+}
+
+/* Success / Tip (green) */
+.message-green {
+  display: flex;
+  align-items: flex-start;
+  background-color: #e2f3e5;
+  border: 1px solid #c2e5c8;
+  border-left: 4px solid #218732;
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 4px;
+  color: #0b4715;
+}
+
+.message-green .message-text-inner {
+  color: #0b4715;
+}
+
+.message-green ul li {
+  color: #0b4715;
+}
+
+/* Warning (orange) */
+.message-orange {
+  display: flex;
+  align-items: flex-start;
+  background-color: #fdf3e0;
+  border: 1px solid #fae0ae;
+  border-left: 4px solid #c88a0e;
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 4px;
+  color: #745006;
+}
+
+.message-orange .message-text-inner {
+  color: #745006;
+}
+
+.message-orange ul li {
+  color: #745006;
+}
+
+/* Note (purple) */
+.message-purple {
+  display: flex;
+  align-items: flex-start;
+  background-color: #e8dbed;
+  border: 1px solid #d9c5e2;
+  border-left: 4px solid #581575;
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 4px;
+  color: #430c5a;
+}
+
+.message-purple .message-text-inner {
+  color: #430c5a;
+}
+
+.message-purple ul li {
+  color: #430c5a;
+}
+
+/* Shared message internals */
+.message-icon {
+  width: 24px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  margin-right: 10px;
+}
+
+.message-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-text-inner {
+  margin: 2px 0 0 0;
+}
+
+/* --------------------------------------------------------------------------
+   Figure Captions
+   -------------------------------------------------------------------------- */
+
+.figure-caption {
+  font-size: 14px;
+  font-weight: 500;
+  font-style: italic;
+  color: #706b6c;
+  text-align: left;
+  margin-top: 6px;
+}
+
+caption {
+  font-size: 14px;
+  font-weight: 500;
+  font-style: italic;
+  color: #706b6c;
+  text-align: left;
+  caption-side: bottom;
+}
+
+/* --------------------------------------------------------------------------
+   Interface / UI element references
+   -------------------------------------------------------------------------- */
+
+span.interface {
+  font-weight: bold;
+  font-style: normal;
+  color: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+
+table {
+  width: 100%;
+  margin: 24px 0;
+  border: 1px solid #e8e8e8;
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+thead {
+  background: #f3f4f6;
+}
+
+th {
+  font-weight: 700;
+  font-size: 14px;
+  color: #242122;
+  text-align: left;
+  padding: 10px 16px;
+  border: 1px solid #e8e8e8;
+}
+
+td {
+  font-size: 14px;
+  font-weight: normal;
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+tr {
+  border-bottom: 1px solid #e8e8e8;
+}
+
+/* --------------------------------------------------------------------------
+   Colored Spans
+   -------------------------------------------------------------------------- */
+
+span.text-green {
+  color: #3b9b4b;
+}
+
+span.text-red {
+  color: #c30014;
+}
+
+span.infodate {
+  color: #073e38;
+  font-weight: 500;
+}
+
+span.code {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  letter-spacing: -0.5px;
+}
+
+p.red {
+  color: #c30014;
+}
+
+p.green {
+  color: #3b9b4b;
+}

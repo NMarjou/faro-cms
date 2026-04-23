@@ -1,0 +1,10 @@
+{
+  "tags": ["admin-only", "passport", "planner", "workbench", "advanced"],
+  "colors": {
+    "admin-only": "#ef4444",
+    "passport": "#3b82f6",
+    "planner": "#10b981",
+    "workbench": "#8b5cf6",
+    "advanced": "#f97316"
+  }
+}
