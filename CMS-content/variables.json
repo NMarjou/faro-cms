@@ -10,7 +10,8 @@
         "plannerName": "Planner",
         "workbenchName": "Workbench",
         "currentVersion": "22.0",
-        "supportEmail": "support@beqom.com"
+        "supportEmail": "support@beqom.com",
+        "_writeTest": "guardrail-check"
       }
     },
     {
@@ -19,5 +20,5 @@
       "variables": {}
     }
   ],
-  "message": "test: restore variables after write-path verification"
+  "message": "test: guardrail — should land on cms-drafts not main"
 }
