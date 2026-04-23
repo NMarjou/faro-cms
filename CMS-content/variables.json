@@ -10,8 +10,7 @@
         "plannerName": "Planner",
         "workbenchName": "Workbench",
         "currentVersion": "22.0",
-        "supportEmail": "support@beqom.com",
-        "_writeTest": "ok-2026-04-23"
+        "supportEmail": "support@beqom.com"
       }
     },
     {
@@ -20,5 +19,5 @@
       "variables": {}
     }
   ],
-  "message": "test: verify CMS write path through GitHub backend"
+  "message": "test: restore variables after write-path verification"
 }
