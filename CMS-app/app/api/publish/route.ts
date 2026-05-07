@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createBranch, createPR, branchExists } from "@/lib/github";
+import {
+  createBranch,
+  createPR,
+  branchExists,
+  defaultBranch,
+  workingBranch,
+  ensureWorkingBranch,
+} from "@/lib/github";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, branch: existingBranch } = body;
+    const { title, description, branch: explicitBranch } = body;
 
     if (!title) {
       return NextResponse.json(
@@ -13,27 +20,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use existing branch or create new one
-    let branch = existingBranch;
-    if (!branch) {
-      const timestamp = Date.now();
-      branch = `content-update/${timestamp}`;
+    // Publish opens a PR from the branch editor saves land on (the working
+    // branch by default) into the repo's default branch. The head must exist
+    // and must differ from base; otherwise GitHub will refuse the PR.
+    const base = defaultBranch();
+    const head = explicitBranch || workingBranch();
+
+    if (head === base) {
+      return NextResponse.json(
+        {
+          error:
+            "Working branch equals the default branch — nothing to publish. Set CMS_WORKING_BRANCH to a separate branch so edits land there first.",
+        },
+        { status: 400 }
+      );
     }
 
-    const exists = await branchExists(branch);
-    if (!exists) {
-      await createBranch(branch);
-    }
+    if (!explicitBranch) await ensureWorkingBranch();
+    else if (!(await branchExists(head))) await createBranch(head);
 
-    // Create PR
     const pr = await createPR(
       title,
       description || "Content update from CMS editor",
-      branch
+      head,
+      base
     );
 
     return NextResponse.json({
-      branch,
+      branch: head,
       prUrl: pr.url,
       prNumber: pr.number,
     });
