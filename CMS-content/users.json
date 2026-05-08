@@ -9,6 +9,11 @@
       "email": "anna.wyszynka@beqom.com",
       "role": "tech-writer",
       "name": "Anna Wyszynka"
+    },
+    {
+      "email": "test.contributor@example.com",
+      "role": "contributor",
+      "name": "Test Contributor"
     }
   ]
 }
