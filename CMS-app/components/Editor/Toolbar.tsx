@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/react";
 import type { Variables, GlossaryTerm as GlossaryTermType, ContentStyle } from "@/lib/types";
 import ImageUpload from "./ImageUpload";
 import LinkPicker from "./LinkPicker";
+import Icon from "../Icon";
 
 interface SpellIssue {
   word: string;
@@ -46,33 +47,27 @@ interface ToolbarProps {
   spellAddedCount?: number;
 }
 
-// SVG icon helper — 16×16
-const icon = (paths: string, title: string) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label={title}>
-    {paths.split("|").map((d, i) => <path key={i} d={d} />)}
-  </svg>
-);
-
+// Editor ribbon icons — Phosphor names per the Faro Design System mapping.
 const ICONS = {
-  bold: icon("M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z|M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z", "Bold"),
-  italic: icon("M19 4h-9|M14 20H5|M15 4L9 20", "Italic"),
-  underline: icon("M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3|M4 21h16", "Underline"),
-  strikethrough: icon("M16 4c-.5-1.5-2.5-3-5-3-3 0-5 2-5 4 0 5 10 4 10 9 0 2.5-2.5 4.5-5.5 4.5-2.5 0-4.5-1.5-5.5-3.5|M4 12h16", "Strikethrough"),
-  code: icon("M16 18l6-6-6-6|M8 6l-6 6 6 6", "Code"),
-  quote: icon("M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z|M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z", "Quote"),
-  codeBlock: icon("M4 17l6-6-6-6|M12 19h8", "Code block"),
-  hr: icon("M5 12h14", "Horizontal rule"),
-  table: icon("M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18", "Table"),
-  image: icon("M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5 5-2.5-2.5L3 17|M14 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6", "Image"),
-  link: icon("M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71", "Link"),
-  video: icon("M23 7l-7 5 7 5V7z|M14 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z", "Video"),
-  box: icon("M21 3H3v18h18V3z", "Box"),
-  find: icon("M11 17.25a6.25 6.25 0 1 1 0-12.5 6.25 6.25 0 0 1 0 12.5z|M16 16l4.5 4.5", "Find"),
-  undo: icon("M3 10h10a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5H7|M3 10l4-4|M3 10l4 4", "Undo"),
-  redo: icon("M21 10H11a5 5 0 0 0-5 5v0a5 5 0 0 0 5 5h6|M21 10l-4-4|M21 10l-4 4", "Redo"),
-  conditional: icon("M12 3v18|M5 8h14|M5 16h14", "Conditional"),
-  indent: icon("M3 8h18|M3 16h18|M9 12h12|M3 12l4-4|M3 12l4 4", "Indent"),
-  outdent: icon("M3 8h18|M3 16h18|M9 12h12|M7 8l-4 4|M7 16l-4-4", "Outdent"),
+  bold:          <Icon name="text-b" size={15} title="Bold" />,
+  italic:        <Icon name="text-italic" size={15} title="Italic" />,
+  underline:     <Icon name="text-underline" size={15} title="Underline" />,
+  strikethrough: <Icon name="text-strikethrough" size={15} title="Strikethrough" />,
+  code:          <Icon name="code" size={15} title="Code" />,
+  quote:         <Icon name="quotes" size={15} title="Quote" />,
+  codeBlock:     <Icon name="file-code" size={15} title="Code block" />,
+  hr:            <Icon name="minus" size={15} title="Horizontal rule" />,
+  table:         <Icon name="table" size={15} title="Table" />,
+  image:         <Icon name="image-square" size={15} title="Image" />,
+  link:          <Icon name="link-simple" size={15} title="Link" />,
+  video:         <Icon name="video" size={15} title="Video" />,
+  box:           <Icon name="info" size={15} title="Message box" />,
+  find:          <Icon name="magnifying-glass" size={15} title="Find" />,
+  undo:          <Icon name="arrow-counter-clockwise" size={15} title="Undo" />,
+  redo:          <Icon name="arrow-clockwise" size={15} title="Redo" />,
+  conditional:   <Icon name="sliders" size={15} title="Conditional" />,
+  indent:        <Icon name="text-indent" size={15} title="Indent" />,
+  outdent:       <Icon name="text-outdent" size={15} title="Outdent" />,
 };
 
 function ConditionDropdown({
@@ -391,7 +386,7 @@ export default function Toolbar({
           <div className="ribbon-row">
             <div className="ribbon-group">
               {btn(
-                icon("M4 6h16|M4 10h16|M4 14h12|M4 18h8", "Structure"),
+                <Icon name="tree-structure" size={15} title="Structure" />,
                 () => onToggleStructure?.(),
                 showStructure,
                 false,
@@ -422,16 +417,14 @@ export default function Toolbar({
                 className={`ribbon-btn${showComments ? " active" : ""}`}
                 style={{ position: "relative" }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
+                <Icon name="chat-circle" size={15} title="Comments" />
                 {commentCount > 0 && (
                   <span style={{
                     position: "absolute",
                     top: -4,
                     right: -4,
                     background: "var(--accent)",
-                    color: "#0f1f2e",
+                    color: "var(--paper-50)",
                     fontSize: 9,
                     fontFamily: "var(--font-sans)",
                     fontWeight: 700,
@@ -483,7 +476,7 @@ export default function Toolbar({
             <div className="ribbon-row">
               <div className="ribbon-group">
                 {btn(
-                  icon("M16 18l6-6-6-6|M8 6l-6 6 6 6", "Source"),
+                  <Icon name="code-simple" size={15} title="Source" />,
                   () => onViewModeChange(viewMode === "visual" ? "source" : "visual"),
                   viewMode === "source",
                   false,

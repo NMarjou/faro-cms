@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { Editor } from "@tiptap/react";
+import Icon from "../Icon";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -190,9 +191,7 @@ export default function CommentsDrawer({
       {/* Header */}
       <div className="comments-drawer-header">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
+          <Icon name="chat-circle" size={16} />
           <span style={{ fontWeight: 600, fontSize: 14 }}>Comments</span>
           {activeComments.length > 0 && (
             <span className="comments-badge">{activeComments.length}</span>

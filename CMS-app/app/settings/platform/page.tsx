@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { ConditionsConfig } from "@/lib/types";
+import type { ConditionsConfig, User, UserRole } from "@/lib/types";
+import Icon from "@/components/Icon";
 
 const DEFAULT_COLORS = [
   "#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6",
@@ -23,6 +24,15 @@ export default function PlatformSettingsPage() {
   const [cssSaving, setCssSaving] = useState(false);
   const [cssMessage, setCssMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Users & roles state
+  const [users, setUsers] = useState<User[]>([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [usersSaving, setUsersSaving] = useState(false);
+  const [usersMessage, setUsersMessage] = useState<string | null>(null);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserRole, setNewUserRole] = useState<UserRole>("contributor");
 
   useEffect(() => {
     // Load conditions
@@ -48,7 +58,64 @@ export default function PlatformSettingsPage() {
         setCssLoaded(true);
       })
       .catch(() => setCssLoaded(true));
+
+    // Load users & roles
+    fetch("/api/users")
+      .then((r) => (r.ok ? r.json() : { users: [] }))
+      .then((d) => {
+        setUsers(d.users || []);
+        setUsersLoaded(true);
+      })
+      .catch(() => setUsersLoaded(true));
   }, []);
+
+  const flashUsers = (msg: string) => {
+    setUsersMessage(msg);
+    setTimeout(() => setUsersMessage(null), 2000);
+  };
+
+  const persistUsers = async (next: User[], successMessage: string) => {
+    setUsersSaving(true);
+    try {
+      const res = await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ users: next, message: successMessage }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      setUsers(next);
+      flashUsers(successMessage);
+    } catch {
+      flashUsers("Failed to save");
+    } finally {
+      setUsersSaving(false);
+    }
+  };
+
+  const addUser = () => {
+    const email = newUserEmail.trim().toLowerCase();
+    const name = newUserName.trim();
+    if (!email) return;
+    if (users.some((u) => u.email.toLowerCase() === email)) {
+      flashUsers("User with that email already exists");
+      return;
+    }
+    const next: User[] = [...users, { email, role: newUserRole, ...(name ? { name } : {}) }];
+    setNewUserEmail("");
+    setNewUserName("");
+    setNewUserRole("contributor");
+    persistUsers(next, `Add user ${email}`);
+  };
+
+  const updateUserRole = (email: string, role: UserRole) => {
+    const next = users.map((u) => (u.email === email ? { ...u, role } : u));
+    persistUsers(next, `Update role for ${email}`);
+  };
+
+  const removeUser = (email: string) => {
+    const next = users.filter((u) => u.email !== email);
+    persistUsers(next, `Remove user ${email}`);
+  };
 
   const saveConditions = async () => {
     setSaving(true);
@@ -295,6 +362,113 @@ export default function PlatformSettingsPage() {
               <span style={{ fontSize: 13, color: "var(--success)" }}>{message}</span>
             )}
           </div>
+        </div>
+
+        {/* Users & Roles */}
+        <div className="card" style={{ maxWidth: 720, marginTop: 16 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 4 }}>Users & Roles</h2>
+          <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 16 }}>
+            Tech writers have full access to the CMS. Contributors are subject-matter experts a tech
+            writer can share specific articles with for review. Roles are not enforced during the
+            current dev phase — auth wiring will pick this up later.
+          </p>
+
+          {usersLoaded && users.length > 0 && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden", marginBottom: 16 }}>
+              {users.map((u, i) => (
+                <div
+                  key={u.email}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.6fr 1fr auto",
+                    gap: 12,
+                    alignItems: "center",
+                    padding: "10px 14px",
+                    borderTop: i > 0 ? "1px solid var(--border-soft)" : undefined,
+                    background: "var(--bg)",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.3 }}>
+                      {u.name || u.email.split("@")[0]}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>
+                      {u.email}
+                    </div>
+                  </div>
+                  <select
+                    className="input"
+                    value={u.role}
+                    onChange={(e) => updateUserRole(u.email, e.target.value as UserRole)}
+                    disabled={usersSaving}
+                    style={{ width: "auto", fontSize: 13, padding: "4px 8px" }}
+                  >
+                    <option value="tech-writer">Tech writer</option>
+                    <option value="contributor">Contributor</option>
+                  </select>
+                  <button
+                    onClick={() => removeUser(u.email)}
+                    disabled={usersSaving}
+                    title="Remove user"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--fg-muted)",
+                      padding: 4,
+                      borderRadius: 4,
+                      display: "inline-flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add user */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr auto", gap: 8, alignItems: "center" }}>
+            <input
+              className="input"
+              type="email"
+              placeholder="email@beqom.com"
+              value={newUserEmail}
+              onChange={(e) => setNewUserEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addUser(); }}
+              style={{ fontSize: 13 }}
+            />
+            <input
+              className="input"
+              placeholder="Name (optional)"
+              value={newUserName}
+              onChange={(e) => setNewUserName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addUser(); }}
+              style={{ fontSize: 13 }}
+            />
+            <select
+              className="input"
+              value={newUserRole}
+              onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+              style={{ fontSize: 13, padding: "6px 8px" }}
+            >
+              <option value="contributor">Contributor</option>
+              <option value="tech-writer">Tech writer</option>
+            </select>
+            <button
+              onClick={addUser}
+              disabled={!newUserEmail.trim() || usersSaving}
+              className="btn btn-primary"
+              style={{ fontSize: 13 }}
+            >
+              Add
+            </button>
+          </div>
+
+          {usersMessage && (
+            <p style={{ fontSize: 13, color: "var(--success)", marginTop: 12 }}>{usersMessage}</p>
+          )}
         </div>
 
         {/* GitHub Integration */}
