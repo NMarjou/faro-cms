@@ -2,19 +2,43 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import Icon from "@/components/Icon";
+import type { User } from "@/lib/types";
 
+const DEFAULT_IDENTITY = "nolwenn.marjou@beqom.com";
+
+// Editor body fonts — per the Faro Design System, exactly two choices:
+// a clean readable sans (default) and a literary serif. Other families
+// (Bricolage, Lora, DM Sans, DM Mono) are reserved for chrome/display.
 const EDITOR_FONTS = [
-  { value: "dm-sans", label: "DM Sans", preview: "var(--font-dm-sans), sans-serif" },
-  { value: "lora", label: "Lora", preview: "var(--font-lora), serif" },
-  { value: "cormorant", label: "Cormorant Garamond", preview: "var(--font-cormorant), serif" },
+  {
+    value: "source-sans",
+    label: "Source Sans 3",
+    description: "Clean technical sans — the workhorse default",
+    preview: "var(--font-editor-sans)",
+  },
+  {
+    value: "spectral",
+    label: "Spectral",
+    description: "Literary serif — designed for long-form on-screen",
+    preview: "var(--font-editor-serif)",
+  },
 ];
 
 export default function UserSettingsPage() {
   const { theme, setTheme } = useTheme();
   const [autosaveInterval, setAutosaveInterval] = useState(120);
   const [showWhitespace, setShowWhitespace] = useState(false);
-  const [editorFont, setEditorFont] = useState("dm-sans");
+  const [editorFont, setEditorFont] = useState("source-sans");
   const [message, setMessage] = useState<string | null>(null);
+
+  // Identity — stand-in for "currently logged in user" until auth is wired.
+  // CurrentUserProvider owns persistence + cross-tab sync; we mirror its
+  // value into local state so the <select> stays controlled.
+  const { setIdentity } = useCurrentUser();
+  const [identity, setIdentityState] = useState<string>(DEFAULT_IDENTITY);
+  const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem("cms-autosave-interval");
@@ -23,7 +47,25 @@ export default function UserSettingsPage() {
     if (ws === "true") setShowWhitespace(true);
     const font = localStorage.getItem("cms-editor-font");
     if (font) setEditorFont(font);
+
+    // Identity defaults to nolwenn for dev; load any prior selection.
+    const id = localStorage.getItem("cms-current-user");
+    if (id) setIdentityState(id);
+    else localStorage.setItem("cms-current-user", DEFAULT_IDENTITY);
+
+    // Pull the user list so the picker offers everyone Platform Settings has
+    // configured. /api/users returns the seeded defaults if the file is empty.
+    fetch("/api/users")
+      .then((r) => (r.ok ? r.json() : { users: [] }))
+      .then((d: { users?: User[] }) => setUsers(d.users || []))
+      .catch(() => setUsers([]));
   }, []);
+
+  const handleIdentityChange = (email: string) => {
+    setIdentityState(email);
+    setIdentity(email); // persists + broadcasts so sidebar/dashboard re-render
+    flash(`Identity set to ${email}`);
+  };
 
   const flash = (msg: string) => {
     setMessage(msg);
@@ -45,8 +87,10 @@ export default function UserSettingsPage() {
   const handleEditorFontChange = (font: string) => {
     setEditorFont(font);
     localStorage.setItem("cms-editor-font", font);
-    // Apply immediately to any open editor via CSS variable
-    const fontCss = EDITOR_FONTS.find((f) => f.value === font)?.preview || "var(--font-dm-sans), sans-serif";
+    // Apply immediately to any open editor via CSS variable. The fallback
+    // chain inside each token (`--font-editor-sans` / `--font-editor-serif`)
+    // already includes system-font fallbacks.
+    const fontCss = EDITOR_FONTS.find((f) => f.value === font)?.preview || "var(--font-editor-sans)";
     document.documentElement.style.setProperty("--font-editor", fontCss);
     flash("Editor font updated");
   };
@@ -57,6 +101,30 @@ export default function UserSettingsPage() {
         <h1>User Settings</h1>
       </header>
       <div className="main-body">
+        {/* Identity — dev stand-in for "currently logged in user" */}
+        <div className="card" style={{ maxWidth: 600, marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 4 }}>Identity</h2>
+          <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 12 }}>
+            Stand-in for &ldquo;currently logged in user&rdquo; during the dev phase.
+            Used as the sender on review requests. Replaced by real auth later.
+          </p>
+          <select
+            className="input"
+            value={identity}
+            onChange={(e) => handleIdentityChange(e.target.value)}
+            style={{ width: "100%", maxWidth: 360, fontSize: 14 }}
+          >
+            {users.length === 0 && (
+              <option value={DEFAULT_IDENTITY}>{DEFAULT_IDENTITY}</option>
+            )}
+            {users.map((u) => (
+              <option key={u.email} value={u.email}>
+                {u.name ? `${u.name} — ${u.email}` : u.email} · {u.role}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="card" style={{ maxWidth: 600 }}>
           <h2 style={{ fontSize: 16, marginBottom: 16 }}>Appearance</h2>
 
@@ -81,23 +149,7 @@ export default function UserSettingsPage() {
                     borderColor: theme === opt.value ? "var(--accent)" : "var(--border)",
                   }}
                 >
-                  {opt.icon === "sun" ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="5" />
-                      <line x1="12" y1="1" x2="12" y2="3" />
-                      <line x1="12" y1="21" x2="12" y2="23" />
-                      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                      <line x1="1" y1="12" x2="3" y2="12" />
-                      <line x1="21" y1="12" x2="23" y2="12" />
-                      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                    </svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                  )}
+                  <Icon name={opt.icon} size={14} />
                   {opt.label}
                 </button>
               ))}
@@ -165,13 +217,19 @@ export default function UserSettingsPage() {
                     style={{ width: 16, height: 16, cursor: "pointer" }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{f.label}</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{f.label}</div>
+                      <div style={{ fontSize: 12, color: "var(--fg-muted)" }}>
+                        {f.description}
+                      </div>
+                    </div>
                     <div
                       style={{
                         fontSize: 15,
                         fontFamily: f.preview,
                         color: "var(--fg-muted)",
-                        marginTop: 2,
+                        marginTop: 4,
+                        lineHeight: 1.5,
                       }}
                     >
                       The quick brown fox jumps over the lazy dog

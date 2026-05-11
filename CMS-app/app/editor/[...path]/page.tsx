@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";
 import dynamic from "next/dynamic";
+import Icon from "@/components/Icon";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import type {
   Variables,
   ConditionsConfig,
@@ -70,11 +72,17 @@ const SourceView = dynamic(() => import("@/components/Editor/SourceView"), {
   ssr: false,
 });
 
+const ReviewDrawer = dynamic(() => import("@/components/Editor/ReviewDrawer"), {
+  ssr: false,
+});
+
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
   const pathSegments = params.path as string[];
   const filePath = pathSegments.map(decodeURIComponent).join("/");
+  const { role } = useCurrentUser();
+  const isContributor = role === "contributor";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,6 +108,9 @@ export default function EditorPage() {
   const [metaDirty, setMetaDirty] = useState(false);
   const [metaSaving, setMetaSaving] = useState(false);
   const [originalMeta, setOriginalMeta] = useState<TocArticle | null>(null);
+
+  // Send-for-review drawer state
+  const [showReviewDrawer, setShowReviewDrawer] = useState(false);
 
   // Spell-check state
   const [showSpellCheck, setShowSpellCheck] = useState(false);
@@ -399,6 +410,29 @@ export default function EditorPage() {
     }
   };
 
+  // Persist updated assignment list and fan out review notifications via the
+  // dedicated share endpoint. The endpoint handles the TOC write, diffs the
+  // previous reviewer set, and only emails the newly-added ones.
+  const handleAssignmentSave = async (emails: string[]) => {
+    const senderEmail =
+      typeof window !== "undefined"
+        ? localStorage.getItem("cms-current-user") || undefined
+        : undefined;
+
+    const res = await fetch("/api/article/share", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filePath, emails, senderEmail }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to save assignment");
+    }
+    // Reflect the new state locally so the drawer's next open shows the right
+    // pre-selection without a page reload.
+    setArticleMeta((p) => (p ? { ...p, assignedTo: emails.length > 0 ? emails : undefined } : p));
+  };
+
   const handleSpellCheck = async () => {
     setSpellChecking(true);
     setShowSpellCheck(true);
@@ -492,12 +526,44 @@ export default function EditorPage() {
           >
             Meta
           </button>
-          <button onClick={handleSave} disabled={saving || !isDirty} className="btn" style={{ opacity: saving || !isDirty ? 0.5 : 1, borderColor: isDirty ? "var(--accent)" : undefined }}>
-            {saving ? "Saving..." : "Save"}
+          <button
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+            className="btn btn-icon"
+            aria-label={saving ? "Saving" : "Save"}
+            title={saving ? "Saving…" : isDirty ? "Save (Cmd/Ctrl+S)" : "No unsaved changes"}
+            style={{
+              opacity: saving || !isDirty ? 0.5 : 1,
+              borderColor: isDirty ? "var(--accent)" : undefined,
+            }}
+          >
+            <Icon name="floppy-disk" size={16} />
           </button>
-          <button onClick={handlePublish} className="btn btn-primary">Publish</button>
+          {!isSnippet && articleMeta && !isContributor && (
+            <button
+              onClick={() => setShowReviewDrawer(true)}
+              className="btn btn-gold"
+              title="Share this article with a contributor for review"
+            >
+              Send for Review{articleMeta.assignedTo && articleMeta.assignedTo.length > 0
+                ? ` (${articleMeta.assignedTo.length})`
+                : ""}
+            </button>
+          )}
+          {!isContributor && (
+            <button onClick={handlePublish} className="btn btn-primary">Publish</button>
+          )}
         </div>
       </header>
+      {!isSnippet && articleMeta && (
+        <ReviewDrawer
+          open={showReviewDrawer}
+          onClose={() => setShowReviewDrawer(false)}
+          initialAssigned={articleMeta.assignedTo || []}
+          articleTitle={articleMeta.title}
+          onSave={handleAssignmentSave}
+        />
+      )}
       <div className="main-body article-editor">
         {error && (
           <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>

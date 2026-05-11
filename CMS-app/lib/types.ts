@@ -10,6 +10,7 @@ export interface TocArticle {
   createdDate?: string;
   lastModified?: string;
   author?: string;
+  assignedTo?: string[]; // emails of contributors the tech writer has shared this article with
 }
 
 export interface TocSection {
@@ -79,6 +80,26 @@ export interface Snippet {
   file: string; // relative path, e.g. "snippets/common-warning.mdx"
   content: string;
 }
+
+// ── Users & Roles ──
+
+export type UserRole = "tech-writer" | "contributor";
+
+export interface User {
+  email: string;
+  role: UserRole;
+  name?: string;
+}
+
+export interface UsersData {
+  users: User[];
+}
+
+/** Seed list shown when CMS-content/users.json doesn't exist yet. */
+export const DEFAULT_USERS: User[] = [
+  { email: "nolwenn.marjou@beqom.com", role: "tech-writer", name: "Nolwenn Marjou" },
+  { email: "anna.wyszynka@beqom.com", role: "tech-writer", name: "Anna Wyszynka" },
+];
 
 // ── GitHub API ──
 

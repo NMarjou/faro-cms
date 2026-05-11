@@ -7,6 +7,8 @@ import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
 import { useTabContext } from "./TabContext";
 import { useTheme } from "./ThemeProvider";
 import FaroLogo from "./FaroLogo";
+import Icon from "./Icon";
+import { useCurrentUser } from "./CurrentUserProvider";
 
 type CreatingAt =
   | null
@@ -18,6 +20,10 @@ type CreatingAt =
 export default function SidebarTree() {
   const pathname = usePathname();
   const router = useRouter();
+  const { role } = useCurrentUser();
+  // Treat unknown / unloaded as tech-writer so the chrome doesn't flicker
+  // empty during the brief load. Contributors render the limited shell.
+  const isContributor = role === "contributor";
   const [toc, setToc] = useState<Toc | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ name: string; file: string } | null>(null);
@@ -192,9 +198,7 @@ export default function SidebarTree() {
   };
 
   const FolderIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-    </svg>
+    <Icon name="folder" size={15} style={{ color: "var(--accent-glow)" }} />
   );
 
   const InlineFolderInput = () => (
@@ -243,7 +247,7 @@ export default function SidebarTree() {
           <FolderIcon />
           <span className="tree-label">{section.name}</span>
           <span className="tree-count">{section.articles.length}</span>
-          <span className={`tree-arrow${isOpen ? " open" : ""}`}>&#9654;</span>
+          <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
         </button>
         {isOpen && (
           <div className="tree-children">
@@ -270,7 +274,7 @@ export default function SidebarTree() {
           >
             <FolderIcon />
             <span className="tree-label">{category.name}</span>
-            <span className={`tree-arrow${isOpen ? " open" : ""}`}>&#9654;</span>
+            <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
           </div>
           <button
             className="tree-add-btn tree-add-btn-hover"
@@ -339,7 +343,7 @@ export default function SidebarTree() {
             <FolderIcon />
             <span className="tree-label">{folderName}</span>
             <span className="tree-count">{childSnippets.length}</span>
-            <span className={`tree-arrow${isOpen ? " open" : ""}`}>&#9654;</span>
+            <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
           </button>
           <button className="tree-add-btn tree-add-btn-hover" title={`New folder in ${folderName}`}
             onClick={(e) => { e.stopPropagation(); setExpanded((prev) => new Set([...prev, key])); startCreating({ type: "snippet-folder", parent: folder }); }}>+</button>
@@ -395,7 +399,7 @@ export default function SidebarTree() {
             <FolderIcon />
             <span className="tree-label">{folderName}</span>
             <span className="tree-count">{childImages.length}</span>
-            <span className={`tree-arrow${isOpen ? " open" : ""}`}>&#9654;</span>
+            <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
           </button>
           <button className="tree-add-btn tree-add-btn-hover" title={`New folder in ${folderName}`}
             onClick={(e) => { e.stopPropagation(); setExpanded((prev) => new Set([...prev, key])); startCreating({ type: "image-folder", parent: folder }); }}>+</button>
@@ -425,8 +429,8 @@ export default function SidebarTree() {
   if (collapsed) {
     return (
       <aside className="sidebar sidebar-collapsed">
-        <div style={{ padding: "12px 0 8px", cursor: "pointer" }} onClick={() => setCollapsed(false)} title="Expand sidebar">
-          <FaroLogo size={24} />
+        <div style={{ padding: "12px 0 8px", display: "flex", justifyContent: "center", cursor: "pointer" }} onClick={() => setCollapsed(false)} title="Expand sidebar">
+          <FaroLogo size={24} showWordmark={false} />
         </div>
         <button
           onClick={() => setCollapsed(false)}
@@ -434,11 +438,7 @@ export default function SidebarTree() {
           title="Expand sidebar"
           style={{ marginTop: "auto" }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-            <polyline points="12 8 15 12 12 16" />
-          </svg>
+          <Icon name="sidebar-simple" size={18} />
         </button>
       </aside>
     );
@@ -447,8 +447,8 @@ export default function SidebarTree() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <FaroLogo size={22} />
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 300, fontSize: 22, letterSpacing: "0.03em" }}>Faro</span>
+        <FaroLogo size={36} />
+        {!isContributor && (
         <div ref={createMenuRef} style={{ position: "relative", marginLeft: "auto" }}>
           <button
             onClick={() => setShowCreateMenu((p) => !p)}
@@ -480,33 +480,26 @@ export default function SidebarTree() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       <div className="sidebar-tree">
         {/* Dashboard */}
         <Link href="/" className={`tree-nav-link${pathname === "/" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
-          </svg>
+          <Icon name="squares-four" />
           Dashboard
         </Link>
 
-        {/* CONTENT section */}
+        {/* CONTENT — hidden for contributors */}
+        {!isContributor && (
+        <>
         <div className="tree-section-label">CONTENT</div>
 
         {/* Articles — expandable with article tree inside */}
         <div className="tree-node">
           <div className="tree-branch-row">
             <Link href="/articles" className={`tree-nav-link${pathname?.startsWith("/articles") || pathname?.startsWith("/editor") ? " active" : ""}`} style={{ flex: 1 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-              </svg>
+              <Icon name="file-text" />
               Articles
             </Link>
             <button
@@ -521,7 +514,7 @@ export default function SidebarTree() {
               +
             </button>
             <button className="tree-expand-btn" onClick={() => toggle("nav:articles")} title="Expand articles">
-              <span className={`tree-arrow${expanded.has("nav:articles") ? " open" : ""}`}>&#9654;</span>
+              <span className={`tree-arrow${expanded.has("nav:articles") ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
             </button>
           </div>
           {expanded.has("nav:articles") && (
@@ -554,16 +547,13 @@ export default function SidebarTree() {
         <div className="tree-node">
           <div className="tree-branch-row">
             <Link href="/snippets" className={`tree-nav-link${pathname === "/snippets" ? " active" : ""}`} style={{ flex: 1 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z" />
-                <polyline points="16 3 16 8 21 8" />
-              </svg>
+              <Icon name="scissors" />
               Snippets
             </Link>
             <button className="tree-add-btn tree-add-btn-hover" title="New snippet folder"
               onClick={(e) => { e.stopPropagation(); setExpanded((prev) => new Set([...prev, "nav:snippets"])); startCreating({ type: "snippet-folder", parent: "" }); }}>+</button>
             <button className="tree-expand-btn" onClick={() => toggle("nav:snippets")} title="Expand snippets">
-              <span className={`tree-arrow${expanded.has("nav:snippets") ? " open" : ""}`}>&#9654;</span>
+              <span className={`tree-arrow${expanded.has("nav:snippets") ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
             </button>
           </div>
           {expanded.has("nav:snippets") && (
@@ -590,17 +580,13 @@ export default function SidebarTree() {
         <div className="tree-node">
           <div className="tree-branch-row">
             <Link href="/images" className={`tree-nav-link${pathname === "/images" ? " active" : ""}`} style={{ flex: 1 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
+              <Icon name="image-square" />
               Images
             </Link>
             <button className="tree-add-btn tree-add-btn-hover" title="New image folder"
               onClick={(e) => { e.stopPropagation(); setExpanded((prev) => new Set([...prev, "nav:images"])); startCreating({ type: "image-folder", parent: "" }); }}>+</button>
             <button className="tree-expand-btn" onClick={() => toggle("nav:images")} title="Expand images">
-              <span className={`tree-arrow${expanded.has("nav:images") ? " open" : ""}`}>&#9654;</span>
+              <span className={`tree-arrow${expanded.has("nav:images") ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
             </button>
           </div>
           {expanded.has("nav:images") && (
@@ -627,15 +613,11 @@ export default function SidebarTree() {
         <div className="tree-node">
           <div className="tree-branch-row">
             <Link href="/variables" className={`tree-nav-link${pathname === "/variables" ? " active" : ""}`} style={{ flex: 1 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 7V4h16v3" />
-                <path d="M9 20h6" />
-                <path d="M12 4v16" />
-              </svg>
+              <Icon name="brackets-curly" />
               Variables
             </Link>
             <button className="tree-expand-btn" onClick={() => toggle("nav:variables")} title="Expand variables">
-              <span className={`tree-arrow${expanded.has("nav:variables") ? " open" : ""}`}>&#9654;</span>
+              <span className={`tree-arrow${expanded.has("nav:variables") ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
             </button>
           </div>
           {expanded.has("nav:variables") && (
@@ -652,7 +634,7 @@ export default function SidebarTree() {
                           <FolderIcon />
                           <span className="tree-label">{set.name}</span>
                           <span className="tree-count">{entries.length}</span>
-                          <span className={`tree-arrow${isSetOpen ? " open" : ""}`}>&#9654;</span>
+                          <span className={`tree-arrow${isSetOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
                         </button>
                         {isSetOpen && (
                           <div className="tree-children">
@@ -689,25 +671,17 @@ export default function SidebarTree() {
 
         {/* TOCs */}
         <Link href="/toc" className={`tree-nav-link${pathname === "/toc" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" />
-          </svg>
+          <Icon name="list" />
           TOCs
         </Link>
+        </>
+        )}
 
         {/* REFERENCE section */}
         <div className="tree-section-label">REFERENCE</div>
 
         <Link href="/glossary" className={`tree-nav-link${pathname === "/glossary" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
+          <Icon name="book-open" />
           Glossary
         </Link>
 
@@ -715,62 +689,45 @@ export default function SidebarTree() {
         <div className="tree-section-label">TOOLS</div>
 
         <Link href="/search" className={`tree-nav-link${pathname === "/search" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          <Icon name="magnifying-glass" />
           Search
         </Link>
 
+        {!isContributor && (
+        <>
         <Link href="/publish" className={`tree-nav-link${pathname === "/publish" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 16 12 12 8 16" />
-            <line x1="12" y1="12" x2="12" y2="21" />
-            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
-          </svg>
+          <Icon name="cloud-arrow-up" />
           Publish
         </Link>
 
         <Link href="/import" className={`tree-nav-link${pathname === "/import" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
+          <Icon name="download-simple" />
           Import
         </Link>
 
         <Link href="/link-mapper" className={`tree-nav-link${pathname === "/link-mapper" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
+          <Icon name="link" />
           Link Mapper
         </Link>
 
         <Link href="/qa" className={`tree-nav-link${pathname === "/qa" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
+          <Icon name="check-circle" />
           QA
         </Link>
+        </>
+        )}
 
         <Link href="/settings" className={`tree-nav-link${pathname === "/settings" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
+          <Icon name="user" />
           User Settings
         </Link>
 
+        {!isContributor && (
         <Link href="/settings/platform" className={`tree-nav-link${pathname === "/settings/platform" ? " active" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
+          <Icon name="gear" />
           Platform Settings
         </Link>
+        )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 4, position: "absolute", bottom: 12, right: 8, zIndex: 5 }}>
@@ -781,21 +738,9 @@ export default function SidebarTree() {
           style={{ position: "static" }}
         >
           {theme === "dark" ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
+            <Icon name="sun" size={14} />
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
+            <Icon name="moon" size={14} />
           )}
         </button>
         <button
@@ -804,11 +749,7 @@ export default function SidebarTree() {
           title="Collapse sidebar"
           style={{ position: "static" }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-            <polyline points="15 8 12 12 15 16" />
-          </svg>
+          <Icon name="sidebar-simple" size={18} />
         </button>
       </div>
 

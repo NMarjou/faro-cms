@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import type { JSONContent } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import { useTabContext } from "./TabContext";
+import Icon from "./Icon";
 import type {
   Variables,
   ConditionsConfig,
@@ -298,11 +299,7 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
           </div>
           <button onClick={() => setShowMeta((p) => !p)} className={`btn btn-sm${showMeta ? " btn-primary" : ""}`} title="Article metadata">Meta</button>
           <button onClick={handleSave} disabled={saving || !isDirty} className="btn" style={{ opacity: saving || !isDirty ? 0.5 : 1, padding: "6px 10px" }} title={saving ? "Saving..." : "Save (Ctrl+S)"}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
+            <Icon name="floppy-disk" size={16} title="Save" />
           </button>
           <button onClick={handlePublish} className="btn btn-primary">Publish</button>
         </div>
