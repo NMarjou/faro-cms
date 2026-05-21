@@ -1,0 +1,15 @@
+{
+  "suggestions": [
+    {
+      "id": "sug_mpffi8ht_jljipk",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T11:50:06.209Z",
+      "originalText": "Passport",
+      "suggestedText": "the Passport module",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "Clearer for first-time readers."
+    }
+  ]
+}
