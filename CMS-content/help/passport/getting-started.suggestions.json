@@ -1,0 +1,15 @@
+{
+  "suggestions": [
+    {
+      "id": "sug_mpfi8f3d_d5q96p",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T13:06:27.050Z",
+      "originalText": " allows employees to manage their goals, ",
+      "suggestedText": "BLA!",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "Why not?"
+    }
+  ]
+}
