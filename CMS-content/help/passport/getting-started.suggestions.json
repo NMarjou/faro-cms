@@ -1,0 +1,15 @@
+{
+  "suggestions": [
+    {
+      "id": "sug_mpfp6t13_osq90e",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T16:21:09.111Z",
+      "originalText": "Passport",
+      "suggestedText": "the Passport app",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "Demo entry for queue"
+    }
+  ]
+}
