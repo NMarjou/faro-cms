@@ -32,6 +32,17 @@
       "status": "accepted",
       "occurrenceIndex": 0,
       "note": "All caps for emphasis"
+    },
+    {
+      "id": "sug_mpfoy133_r004yc",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T16:14:19.647Z",
+      "originalText": "passport",
+      "suggestedText": "DO NOT APPLY",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "Should be rejected"
     }
   ]
 }
