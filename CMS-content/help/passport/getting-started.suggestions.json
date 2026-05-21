@@ -21,6 +21,17 @@
       "status": "pending",
       "occurrenceIndex": 0,
       "note": "this is for the best"
+    },
+    {
+      "id": "sug_mpfowu4f_clmaje",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T16:13:23.967Z",
+      "originalText": "⚡ passport",
+      "suggestedText": "⚡ PASSPORT (accepted)",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "All caps for emphasis"
     }
   ]
 }
