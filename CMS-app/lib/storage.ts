@@ -49,11 +49,14 @@ export async function listFilesRecursive(
   ref?: string
 ): Promise<string[]> {
   if (isLocal) return localFs.listFilesRecursive(path);
-  // GitHub getTree already returns recursive results
+  // GitHub getTree already returns recursive results. Translate the incoming
+  // app-shaped path (content/...) to the repo-shaped prefix (CMS-content/...)
+  // before filtering, then map matched tree paths back to app shape.
   const tree = await github.getTree(ref);
+  const repoPrefix = github.toRepoPath(path);
   return tree
-    .filter((item) => item.type === "blob" && item.path.startsWith(path.replace(/^content\//, "")))
-    .map((item) => `content/${item.path}`);
+    .filter((item) => item.type === "blob" && item.path.startsWith(repoPrefix))
+    .map((item) => github.fromRepoPath(item.path));
 }
 
 export { isLocal };

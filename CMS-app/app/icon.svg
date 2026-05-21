@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 2 32 25" fill="none">
+  <!-- Five rays + dot at the lantern -->
+  <g stroke="#ffffff" stroke-width="1.4" stroke-linecap="round">
+    <line x1="16" y1="8.5" x2="16"   y2="3"/>
+    <line x1="16" y1="8.5" x2="20.5" y2="4.5"/>
+    <line x1="16" y1="8.5" x2="11.5" y2="4.5"/>
+    <line x1="16" y1="8.5" x2="24"   y2="8.5"/>
+    <line x1="16" y1="8.5" x2="8"    y2="8.5"/>
+  </g>
+  <circle cx="16" cy="8.5" r="1.6" fill="#ffffff"/>
+  <!-- Tapered tower with rounded dome and 2 thick stripes -->
+  <g stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M12.5 11.5 Q16 9.2 19.5 11.5"/>
+    <path d="M13.4 11.5 L11.8 26.5"/>
+    <path d="M18.6 11.5 L20.2 26.5"/>
+    <line x1="10.8" y1="26.5" x2="21.2" y2="26.5"/>
+    <line x1="12.7" y1="15.5" x2="19.3" y2="15.5" stroke-width="2.6"/>
+    <line x1="12.3" y1="20.5" x2="19.7" y2="20.5" stroke-width="2.6"/>
+  </g>
+</svg>

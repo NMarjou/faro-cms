@@ -17,20 +17,14 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import Icon from "./Icon";
 
 // ── Drag handle icon (6 dots) ──
 export const DragHandle = React.forwardRef<HTMLSpanElement, React.HTMLAttributes<HTMLSpanElement>>(
   function DragHandle(props, ref) {
     return (
       <span className="drag-handle" ref={ref} {...props}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-          <circle cx="3.5" cy="2" r="1.2" />
-          <circle cx="8.5" cy="2" r="1.2" />
-          <circle cx="3.5" cy="6" r="1.2" />
-          <circle cx="8.5" cy="6" r="1.2" />
-          <circle cx="3.5" cy="10" r="1.2" />
-          <circle cx="8.5" cy="10" r="1.2" />
-        </svg>
+        <Icon name="dots-six-vertical" size={14} />
       </span>
     );
   }

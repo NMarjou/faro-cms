@@ -1,42 +1,120 @@
+/* ==========================================================================
+   Faro Design System — "Lighthouse at Sea"
+   Cool paper, deep indigo night, navy lantern, gold glow, sienna editorial.
+   ========================================================================== */
 :root {
-  --bg: #faf8f4;
-  --bg-secondary: #f5f0e8;
-  --bg-tertiary: #ebe4d6;
-  --fg: #0f1f2e;
-  --fg-muted: #5a7080;
-  --border: #ddd5c8;
-  --accent: #c8a96e;
-  --accent-hover: #b89a5f;
-  --accent-light: rgba(200, 169, 110, 0.12);
-  --danger: #c30014;
-  --danger-light: #fdf2f3;
-  --success: #218732;
-  --success-light: #e2f3e5;
-  --warning: #c88a0e;
-  --warning-light: #fdf3e0;
-  --info: #0c6497;
-  --info-light: #e0eef6;
+  /* ── Brand fonts ─────────────────────────────────────────────────────── */
+  --font-sans:    var(--font-dm-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    var(--font-dm-mono), "SF Mono", "Fira Code", monospace;
+  --font-display: var(--font-bricolage), "Georgia", serif;     /* hero, page titles, stat numerals */
+  --font-serif:   var(--font-lora), Georgia, serif;            /* wordmark, h2, italic editorial */
+  /* Editor body — two user-pickable families, exposed in User Settings.
+     `--font-editor` is set on the document root by the settings page; default
+     is Source Sans 3 (the design system's "clean technical sans" pick). */
+  --font-editor-sans:  var(--font-source), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-editor-serif: var(--font-spectral), Georgia, serif;
+  --font-editor:       var(--font-editor-sans);
+
+  /* ── Core palette — Sea ──────────────────────────────────────────────── */
+  /* Cool paper surfaces */
+  --paper-50:  #f7f9fc;
+  --paper-100: #eff3f9;
+  --paper-200: #e3eaf3;
+  --paper-300: #d0dae8;
+
+  /* Indigo ink — deep, cool ink + night canvas */
+  --cocoa-900: #0e1623;
+  --cocoa-800: #14202f;
+  --cocoa-700: #1c2a3d;
+  --cocoa-600: #2a3a52;
+  --cocoa-500: #5a6a82;
+  --cocoa-400: #7a8aa3;
+  --cocoa-300: #a8b5c8;
+  --cocoa-200: #c1cbd9;
+  --cocoa-100: #dde4ee;
+
+  /* Lantern blue — primary accent */
+  --amber-700: #0b2a6b;
+  --amber-600: #122f7a;
+  --amber-500: #1e3a8a;
+  --amber-400: #2c4ba0;
+  --amber-300: #4866c2;
+  --amber-tint: rgba(30, 58, 138, 0.14);
+
+  /* Lantern gold — secondary accent / glow / stats */
+  --gold-700: #8a5a08;
+  --gold-600: #a87010;
+  --gold-500: #c8881a;
+  --gold-400: #d99a2e;
+  --gold-300: #e8b450;
+  --gold-tint: rgba(200, 136, 26, 0.14);
+
+  /* Burnt sienna — editorial italic accent */
+  --sienna-700: #b54d2a;
+  --sienna-500: #d4683a;
+  --sienna-400: #e0824f;
+  --sienna-300: #ec946a;
+
+  /* Semantic */
+  --danger:        #dc2626;
+  --danger-light:  #fde2e2;
+  --success:       #16a34a;
+  --success-light: #dcf3e3;
+  --warning:       #d97706;
+  --warning-light: #fbeed0;
+  --info:          #2563eb;
+  --info-light:    #dde9fb;
+  --note:          #7c3aed;
+  --note-light:    #ebdffb;
+
+  /* ── Semantic tokens (light = paper) ─────────────────────────────────── */
+  --bg:            var(--paper-50);
+  --bg-secondary:  var(--paper-100);
+  --bg-tertiary:   var(--paper-200);
+  --bg-muted:      var(--paper-100);
+  --fg:            var(--cocoa-700);
+  --fg-muted:      var(--cocoa-400);
+  --border:        var(--paper-300);
+  --border-soft:   #e6ecf4;
+  --accent:        var(--amber-500);
+  --accent-hover:  var(--amber-600);
+  --accent-light:  var(--amber-tint);
+  --accent-glow:   var(--gold-500);
+  --highlight:     var(--gold-500);
+  --editorial:     var(--sienna-500);
+  --ws-marker:     #bbb;
+
+  /* Sidebar — cool off-white in light mode */
+  --sidebar-bg:             #fbfcfe;
+  --sidebar-fg:             var(--cocoa-700);
+  --sidebar-fg-muted:       var(--cocoa-500);
+  --sidebar-fg-dim:         var(--cocoa-400);
+  --sidebar-border:         #e6ecf4;
+  --sidebar-hover:          #eff3f9;
+  --sidebar-active-bg:      var(--amber-tint);
+  --sidebar-active-fg:      var(--amber-700);
+  --sidebar-control-bg:     rgba(28, 42, 61, 0.04);
+  --sidebar-control-border: rgba(28, 42, 61, 0.10);
+  --sidebar-divider-soft:   rgba(28, 42, 61, 0.05);
+
+  /* Legacy aliases (kept for any inline references) */
+  --navy: var(--cocoa-900);
+  --ocean: var(--amber-500);
+
+  /* ── Spacing, radii, elevation ───────────────────────────────────────── */
+  --radius:      6px;
+  --radius-lg:   10px;
+  --radius-pill: 99px;
   --sidebar-width: 260px;
   --header-height: 56px;
-  --radius: 6px;
-  --radius-lg: 10px;
-  --font-sans: var(--font-dm-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-dm-mono), "SF Mono", "Fira Code", monospace;
-  --font-display: var(--font-cormorant), "Georgia", serif;
-  --font-editor: var(--font-dm-sans), -apple-system, BlinkMacSystemFont, sans-serif;
-  --bg-muted: #f5f0e8;
-  --note: #581575;
-  --note-light: #e8dbed;
-  --ws-marker: #bbb;
-  --sidebar-bg: #0f1f2e;
-  --sidebar-fg: #f5f0e8;
-  --sidebar-fg-muted: #8ba3b4;
-  --sidebar-border: #1a3347;
-  --sidebar-hover: #1a3347;
-  --sidebar-active-bg: rgba(200, 169, 110, 0.12);
-  --sidebar-active-fg: #e8d5a3;
-  --navy: #0f1f2e;
-  --ocean: #1d4d6b;
+
+  --shadow-sm:     0 1px 2px rgba(14, 22, 35, 0.06);
+  --shadow-md:     0 4px 12px rgba(14, 22, 35, 0.10);
+  --shadow-lg:     0 8px 30px rgba(14, 22, 35, 0.16);
+  --shadow-drawer: -4px 0 16px rgba(14, 22, 35, 0.10);
+
+  /* Optional paper grain (apply on dashboard / editor canvas) */
+  --paper-grain: repeating-linear-gradient(0deg, rgba(28,42,61,.012) 0 1px, transparent 1px 4px);
 }
 
 /* ── Light mode: Navy sidebar ── */
@@ -80,7 +158,7 @@
 }
 
 .sidebar .tree-count {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sidebar-control-bg);
   color: var(--sidebar-fg-muted);
 }
 
@@ -125,31 +203,31 @@
 }
 
 .sidebar .sidebar-divider {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--sidebar-divider-soft);
 }
 
 .sidebar .sidebar-collapse-btn,
 .sidebar .sidebar-expand-btn {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--sidebar-control-border);
+  background: var(--sidebar-control-bg);
   color: var(--sidebar-fg-muted);
 }
 
 .sidebar .sidebar-collapse-btn:hover,
 .sidebar .sidebar-expand-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
   color: var(--sidebar-fg);
-  border-color: rgba(200, 169, 110, 0.3);
+  border-color: var(--accent-glow);
 }
 
 .sidebar .create-menu-btn {
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--sidebar-control-border);
+  background: var(--sidebar-control-bg);
   color: var(--sidebar-fg-muted);
 }
 
 .sidebar .create-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
   color: var(--sidebar-active-fg);
 }
 
@@ -159,16 +237,16 @@
   color: var(--sidebar-fg);
 }
 
-/* ── Light mode: Navy tab bar ── */
+/* ── Tab bar — sits on the same surface as the sidebar/header ── */
 
 .tab-bar {
-  background: var(--navy);
+  background: var(--sidebar-bg);
   border-bottom-color: var(--sidebar-border);
 }
 
 .tab-bar-item {
   color: var(--sidebar-fg-muted);
-  border-right-color: rgba(255, 255, 255, 0.06);
+  border-right-color: var(--sidebar-divider-soft);
 }
 
 .tab-bar-item:hover {
@@ -177,9 +255,9 @@
 }
 
 .tab-bar-item.active {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sidebar-control-bg);
   color: var(--sidebar-fg);
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--accent-glow);
 }
 
 .tab-bar-close {
@@ -187,14 +265,15 @@
 }
 
 .tab-bar-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f87171;
+  background: var(--sidebar-hover);
+  color: var(--danger);
 }
 
-/* ── Light mode: Navy header bar ── */
+/* ── Header chrome — sits on the same surface as the sidebar so the chrome
+   reads as one continuous frame around the body canvas. ── */
 
 .main-header {
-  background: var(--navy);
+  background: var(--sidebar-bg);
   color: var(--sidebar-fg);
   border-bottom-color: var(--sidebar-border);
 }
@@ -205,62 +284,75 @@
 
 .main-header .btn {
   color: var(--sidebar-fg);
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sidebar-control-bg);
+  border-color: var(--sidebar-control-border);
 }
 
 .main-header .btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
 }
 
 .main-header .btn-primary {
   background: var(--accent);
-  color: #0f1f2e;
+  color: var(--paper-50);
   border-color: var(--accent);
 }
 
 .main-header .btn-primary:hover {
   background: var(--accent-hover);
+  color: var(--paper-50);
 }
 
 .main-header .badge {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-control-bg);
   color: var(--sidebar-fg-muted);
 }
 
 /* ── Dark Mode ── */
 
+/* ── Dark mode — night by the lantern ────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg: #0f1f2e;
-  --bg-secondary: #1a3347;
-  --bg-tertiary: #243d52;
-  --fg: #f5f0e8;
-  --fg-muted: #8ba3b4;
-  --border: #2a4155;
-  --accent: #c8a96e;
-  --accent-hover: #e8d5a3;
-  --accent-light: rgba(200, 169, 110, 0.15);
-  --danger: #f87171;
-  --danger-light: rgba(248, 113, 113, 0.12);
+  --bg:            var(--cocoa-900);
+  --bg-secondary:  var(--cocoa-800);
+  --bg-tertiary:   var(--cocoa-700);
+  --bg-muted:      var(--cocoa-800);
+  --fg:            var(--cocoa-100);
+  --fg-muted:      var(--cocoa-300);
+  --border:        var(--cocoa-600);
+  --border-soft:   #1f2c40;
+  --accent:        var(--amber-500);
+  --accent-hover:  var(--amber-300);
+  --accent-light:  rgba(30, 58, 138, 0.20);
+  --accent-glow:   var(--gold-300);
+  --highlight:     var(--gold-300);
+  --editorial:     var(--sienna-300);
+  --ws-marker:     var(--cocoa-500);
+
+  --danger:  #f87171;
+  --danger-light:  rgba(248, 113, 113, 0.12);
   --success: #4ade80;
   --success-light: rgba(74, 222, 128, 0.12);
   --warning: #fbbf24;
   --warning-light: rgba(251, 191, 36, 0.12);
-  --info: #60cdff;
-  --info-light: rgba(96, 205, 255, 0.12);
-  --note: #b07cc8;
-  --note-light: rgba(176, 124, 200, 0.12);
-  --bg-muted: #1a3347;
-  --ws-marker: #5a7080;
-  --sidebar-bg: var(--bg-secondary);
-  --sidebar-fg: var(--fg);
-  --sidebar-fg-muted: var(--fg-muted);
-  --sidebar-border: var(--border);
-  --sidebar-hover: var(--bg-tertiary);
-  --sidebar-active-bg: var(--accent-light);
-  --sidebar-active-fg: var(--accent);
-  --navy: #0f1f2e;
-  --ocean: #1d4d6b;
+  --info:    #60a5fa;
+  --info-light:    rgba(96, 165, 250, 0.12);
+  --note:    #a78bfa;
+  --note-light:    rgba(167, 139, 250, 0.12);
+
+  /* Sidebar — deep indigo in dark mode */
+  --sidebar-bg:             #070d18;
+  --sidebar-fg:             var(--cocoa-100);
+  --sidebar-fg-muted:       var(--cocoa-300);
+  --sidebar-fg-dim:         #6a7a92;
+  --sidebar-border:         #1c2a3d;
+  --sidebar-hover:          rgba(255, 255, 255, 0.04);
+  --sidebar-active-bg:      var(--amber-tint);
+  --sidebar-active-fg:      var(--amber-300);
+  --sidebar-control-bg:     rgba(255, 255, 255, 0.04);
+  --sidebar-control-border: rgba(255, 255, 255, 0.10);
+  --sidebar-divider-soft:   rgba(255, 255, 255, 0.04);
+
+  --paper-grain: none;
   color-scheme: dark;
 }
 
@@ -316,12 +408,13 @@ button {
 .sidebar-header {
   height: var(--header-height);
   padding: 0 20px;
-  font-weight: 700;
-  font-size: 16px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--sidebar-border);
+  box-shadow: 0 1px 0 var(--sidebar-divider-soft);
+  color: var(--sidebar-fg);
 }
 
 /* ── Tab Bar ── */
@@ -357,7 +450,7 @@ button {
   background: var(--bg);
   color: var(--fg);
   font-weight: 500;
-  border-bottom: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent-glow);
   margin-bottom: -1px;
 }
 
@@ -883,6 +976,7 @@ button.tree-nav-link {
 .main-header {
   height: var(--header-height);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 var(--sidebar-divider-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -891,8 +985,12 @@ button.tree-nav-link {
 }
 
 .main-header h1 {
-  font-size: 18px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--fg);
+  margin: 0;
 }
 
 .main-body {
@@ -929,13 +1027,32 @@ button.tree-nav-link {
 
 .btn-primary {
   background: var(--accent);
-  color: #0f1f2e;
+  color: var(--paper-50);
   border-color: var(--accent);
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+/* Gold button — secondary "feature" action (e.g. Send for Review).
+   Outline variant of the design-system gold tier: transparent fill, gold
+   border, gold ink. The border is the visual carrier, themed via
+   --accent-glow so it tracks gold-500 in light and gold-300 in dark.
+   Hover transitions to the canonical solid spec — gold-500 fill with
+   cocoa-900 ink — so the press reads as the outline filling in. */
+.btn.btn-gold {
+  background: transparent;
+  color: var(--accent-glow);
+  border-color: var(--accent-glow);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn.btn-gold:hover {
+  background: var(--gold-500);
+  color: var(--cocoa-900);
+  border-color: var(--gold-500);
 }
 
 .btn-danger {
@@ -947,6 +1064,13 @@ button.tree-nav-link {
 .btn-sm {
   padding: 4px 10px;
   font-size: 13px;
+}
+
+/* Icon-only button — square padding so a single 16px Phosphor glyph sits
+   centred without text. Use the title/aria-label for the accessible name. */
+.btn.btn-icon {
+  padding: 8px 10px;
+  line-height: 1;
 }
 
 .card {
@@ -1005,24 +1129,36 @@ button.tree-nav-link {
 
 .stat-card {
   padding: 20px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
 }
 
 .stat-card .stat-value {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.005em;
+  color: var(--highlight);
 }
 
 .stat-card .stat-label {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-muted);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .recent-article-row:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
+}
+
+.quick-action-card {
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.quick-action-card:hover {
+  border-color: var(--accent);
 }
 
 /* ── Search ── */
@@ -1136,7 +1272,7 @@ button.tree-nav-link {
 
 .tab-btn.active {
   background: var(--accent);
-  color: #0f1f2e;
+  color: var(--paper-50);
   border-color: var(--accent);
 }
 
@@ -1586,12 +1722,12 @@ button.tree-nav-link {
 [data-theme="dark"] .tree-nav-link:hover,
 [data-theme="dark"] .sidebar-tools a:hover,
 [data-theme="dark"] .tree-branch:hover {
-  color: #f5f0e8;
+  color: var(--sidebar-fg);
 }
 
 [data-theme="dark"] .tree-section-label,
 [data-theme="dark"] .sidebar-tools-section-label {
-  color: #8ba3b4;
+  color: var(--sidebar-fg-dim);
 }
 
 [data-theme="dark"] .tab-bar {
@@ -1619,31 +1755,10 @@ button.tree-nav-link {
   color: var(--fg-muted);
 }
 
-[data-theme="dark"] .main-header {
-  background: var(--bg-secondary);
-  color: var(--fg);
-  border-bottom-color: var(--border);
-}
-
-[data-theme="dark"] .main-header .btn {
-  color: var(--fg);
-  border-color: var(--border);
-  background: var(--bg);
-}
-
-[data-theme="dark"] .main-header .btn:hover {
-  background: var(--bg-tertiary);
-}
-
+/* Dark-mode header — base rules already use --sidebar-* tokens which flip
+   automatically. Only override what differs at the primary-CTA level. */
 [data-theme="dark"] .main-header .btn-primary {
-  background: var(--accent);
-  color: #0f1f2e;
-  border-color: var(--accent);
-}
-
-[data-theme="dark"] .main-header .badge {
-  background: var(--bg-tertiary);
-  color: var(--fg-muted);
+  color: var(--cocoa-100);
 }
 
 [data-theme="dark"] .ProseMirror {
@@ -1662,7 +1777,7 @@ button.tree-nav-link {
 
 [data-theme="dark"] .tab-btn.active {
   background: var(--accent);
-  color: #0f1f2e;
+  color: var(--paper-50);
 }
 
 [data-theme="dark"] .badge {
@@ -1780,8 +1895,8 @@ button.tree-nav-link {
 /* ── Comment Highlights ── */
 
 .ProseMirror .comment-highlight {
-  background: rgba(200, 169, 110, 0.18);
-  border-bottom: 2px solid var(--accent);
+  background: rgba(200, 136, 26, 0.18);
+  border-bottom: 2px solid var(--accent-glow);
   padding: 1px 0;
   border-radius: 2px;
   cursor: pointer;
@@ -1789,15 +1904,15 @@ button.tree-nav-link {
 }
 
 .ProseMirror .comment-highlight:hover {
-  background: rgba(200, 169, 110, 0.32);
+  background: rgba(200, 136, 26, 0.32);
 }
 
 [data-theme="dark"] .ProseMirror .comment-highlight {
-  background: rgba(200, 169, 110, 0.14);
+  background: rgba(232, 180, 80, 0.14);
 }
 
 [data-theme="dark"] .ProseMirror .comment-highlight:hover {
-  background: rgba(200, 169, 110, 0.28);
+  background: rgba(232, 180, 80, 0.28);
 }
 
 /* ── Comments Drawer ── */
@@ -1834,7 +1949,7 @@ button.tree-nav-link {
 
 .comments-badge {
   background: var(--accent);
-  color: #0f1f2e;
+  color: var(--paper-50);
   font-size: 11px;
   font-weight: 700;
   border-radius: 99px;
@@ -1934,7 +2049,7 @@ button.tree-nav-link {
   font-size: 12px;
   font-weight: 600;
   background: var(--accent);
-  color: #0f1f2e;
+  color: var(--paper-50);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -2098,5 +2213,93 @@ button.tree-nav-link {
 
 [data-theme="dark"] .comments-action-btn.danger:hover {
   background: rgba(195, 0, 20, 0.15);
+}
+
+/* ==========================================================================
+   Faro named typography styles — opt-in, applied where the design system asks
+   ========================================================================== */
+.faro-wordmark {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: 0.03em;
+}
+
+.faro-display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 48px;
+  line-height: 1.05;
+  letter-spacing: 0.005em;
+  color: var(--fg);
+}
+
+.faro-h1-page {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 30px;
+  letter-spacing: 0.005em;
+  color: var(--fg);
+}
+
+.faro-h2 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--fg);
+  letter-spacing: -0.005em;
+}
+
+.faro-stat-value {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 36px;
+  color: var(--highlight);
+  line-height: 1;
+  letter-spacing: 0.005em;
+}
+
+.faro-stat-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.faro-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.faro-section-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.faro-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.faro-long-form {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--fg);
+}
+
+.faro-editorial {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--editorial);
 }
 

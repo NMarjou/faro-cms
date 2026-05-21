@@ -1,58 +1,101 @@
 "use client";
 
-import { useTheme } from "./ThemeProvider";
-
 interface FaroLogoProps {
   size?: number;
-  variant?: "auto" | "dark-bg" | "light-bg";
+  showWordmark?: boolean;
+  glow?: boolean;
 }
 
 /**
- * Faro lighthouse logo mark.
- * - dark-bg: gold lines on dark background (used in sidebar / dark mode)
- * - light-bg: navy lines with gold dot on light background
- * - auto: picks based on current theme
+ * Faro lighthouse mark — "Lighthouse at Sea" identity.
+ * - 5 gold rays + dot at the lantern (stroke `var(--accent-glow)`).
+ * - Tapered indigo tower with a soft quadratic dome and 2 thick stripes
+ *   (stroke `var(--sidebar-fg)`, so it inverts cleanly between modes).
+ * - Optional radial gold glow behind the mark.
+ * - Optional "Faro" wordmark in Lora 500, baseline-aligned to the bottom of
+ *   the icon. Source: design system `Primitives.jsx → FaroMark`.
  */
-export default function FaroLogo({ size = 28, variant = "auto" }: FaroLogoProps) {
-  const { theme } = useTheme();
+export default function FaroLogo({
+  size = 28,
+  showWordmark = true,
+  glow = true,
+}: FaroLogoProps) {
+  const svgSize = Math.round(size * 1.15);
+  const svgHeight = Math.round((svgSize * 25) / 32);
 
-  // In light mode the sidebar is always navy, so the logo is always "dark-bg" style.
-  // In dark mode everything is navy, so also "dark-bg".
-  // "light-bg" is only used if explicitly requested (e.g. on a light content panel).
-  const useDarkBg =
-    variant === "dark-bg" ||
-    (variant === "auto" && true); // sidebar is always navy in both modes
-
-  const stroke = useDarkBg ? "#c8a96e" : "#0d1c2a";
-  const dot = "#c8a96e";
-
-  // The SVG viewBox is based on the logo coords: elements span from roughly -1 to 36 on x, -4 to 54 on y
-  // Adding a bit of padding: viewBox="-4 -8 44 66"
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="-4 -8 44 66"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ display: "block", flexShrink: 0 }}
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "flex-end",
+        gap: showWordmark ? 8 : 0,
+        position: "relative",
+        flexShrink: 0,
+      }}
     >
-      {/* Pulse ring (subtle animation) */}
-      <circle cx="28" cy="28" r="6" fill="none" stroke={dot} strokeWidth="0.5">
-        <animate attributeName="r" values="6;18;6" dur="3s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.45;0;0.45" dur="3s" repeatCount="indefinite" />
-      </circle>
-      {/* Tower */}
-      <line x1="28" y1="28" x2="28" y2="54" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" />
-      {/* Base */}
-      <line x1="20" y1="54" x2="36" y2="54" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
-      {/* Light dot (source) */}
-      <circle cx="28" cy="28" r="3.5" fill={dot} />
-      {/* Beam 1 (narrow) */}
-      <line x1="28" y1="28" x2="6" y2="-4" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" />
-      {/* Beam 2 (mid) */}
-      <line x1="28" y1="28" x2="1" y2="8" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" opacity="0.65" />
-      {/* Beam 3 (wide) */}
-      <line x1="28" y1="28" x2="-1" y2="18" stroke={stroke} strokeWidth="1" strokeLinecap="round" opacity="0.4" />
-    </svg>
+      {glow && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: -2,
+            top: "50%",
+            width: svgSize + 4,
+            height: svgSize + 4,
+            transform: "translateY(-50%)",
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle, rgba(232,180,80,.35) 0%, transparent 60%)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      <svg
+        viewBox="0 2 32 25"
+        width={svgSize}
+        height={svgHeight}
+        aria-hidden="true"
+        fill="none"
+        style={{ position: "relative", flexShrink: 0, display: "block" }}
+      >
+        {/* Five gold rays + dot at the lantern */}
+        <g stroke="var(--accent-glow)" strokeWidth="1" strokeLinecap="round">
+          <line x1="16" y1="8.5" x2="16" y2="3" />
+          <line x1="16" y1="8.5" x2="20.5" y2="4.5" />
+          <line x1="16" y1="8.5" x2="11.5" y2="4.5" />
+          <line x1="16" y1="8.5" x2="24" y2="8.5" />
+          <line x1="16" y1="8.5" x2="8" y2="8.5" />
+        </g>
+        <circle cx="16" cy="8.5" r="1.3" fill="var(--accent-glow)" />
+        {/* Tapered tower with rounded dome and 2 thick stripes */}
+        <g
+          stroke="var(--sidebar-fg)"
+          strokeWidth="1.25"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        >
+          <path d="M12.5 11.5 Q16 9.2 19.5 11.5" />
+          <path d="M13.4 11.5 L11.8 26.5" />
+          <path d="M18.6 11.5 L20.2 26.5" />
+          <line x1="10.8" y1="26.5" x2="21.2" y2="26.5" />
+          <line x1="12.7" y1="15.5" x2="19.3" y2="15.5" strokeWidth="2.4" />
+          <line x1="12.3" y1="20.5" x2="19.7" y2="20.5" strokeWidth="2.4" />
+        </g>
+      </svg>
+      {showWordmark && (
+        <span
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontWeight: 500,
+            fontSize: Math.round(size * 0.82),
+            letterSpacing: ".005em",
+            color: "var(--sidebar-fg)",
+            lineHeight: 0.85,
+          }}
+        >
+          Faro
+        </span>
+      )}
+    </span>
   );
 }
