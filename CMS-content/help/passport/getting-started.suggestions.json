@@ -21,6 +21,17 @@
       "status": "pending",
       "occurrenceIndex": 0,
       "note": "Clearer wording."
+    },
+    {
+      "id": "sug_mpffzfdq_cqufvb",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T12:03:28.286Z",
+      "originalText": "lighthouse",
+      "suggestedText": "beacon",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "Plain English."
     }
   ]
 }
