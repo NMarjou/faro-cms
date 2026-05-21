@@ -10,6 +10,17 @@
       "status": "pending",
       "occurrenceIndex": 0,
       "note": "Why not?"
+    },
+    {
+      "id": "sug_mpfi8wfd_fjkrbc",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-21T13:06:49.513Z",
+      "originalText": "Set up check-in reminders for regular progress updates",
+      "suggestedText": "blebleble",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "this is for the best"
     }
   ]
 }
