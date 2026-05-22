@@ -31,6 +31,17 @@
       "status": "rejected",
       "occurrenceIndex": 0,
       "note": "More formal"
+    },
+    {
+      "id": "sug_mpgknazf_w9ksri",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-22T07:01:46.972Z",
+      "originalText": "Personal objectives",
+      "suggestedText": "Personal objectives (revised)",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "demo"
     }
   ]
 }
