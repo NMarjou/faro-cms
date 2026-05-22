@@ -11,6 +11,8 @@ export interface TocArticle {
   lastModified?: string;
   author?: string;
   assignedTo?: string[]; // emails of contributors the tech writer has shared this article with
+  reviewsDone?: string[]; // emails of reviewers who have marked their review complete
+  assignedBy?: string; // email of the tech writer who initiated the share (used for review-done notifications)
 }
 
 export interface TocSection {
@@ -100,6 +102,35 @@ export const DEFAULT_USERS: User[] = [
   { email: "nolwenn.marjou@beqom.com", role: "tech-writer", name: "Nolwenn Marjou" },
   { email: "anna.wyszynka@beqom.com", role: "tech-writer", name: "Anna Wyszynka" },
 ];
+
+// ── Suggested edits ──
+
+export type SuggestionStatus = "pending" | "accepted" | "rejected";
+
+export interface Suggestion {
+  id: string;
+  /** Email of the contributor who proposed the change. */
+  author: string;
+  authorName?: string;
+  createdAt: string;
+  /** The text the contributor highlighted in the article body. */
+  originalText: string;
+  /** The contributor's proposed replacement. */
+  suggestedText: string;
+  status: SuggestionStatus;
+  /**
+   * Zero-based index of which occurrence of `originalText` in the article body
+   * the suggestion targets — used to disambiguate when the same span appears
+   * more than once. Captured at submit time from the contributor's selection.
+   */
+  occurrenceIndex?: number;
+  /** Optional message from the contributor explaining the edit. */
+  note?: string;
+}
+
+export interface SuggestionsData {
+  suggestions: Suggestion[];
+}
 
 // ── GitHub API ──
 

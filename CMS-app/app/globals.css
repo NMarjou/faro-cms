@@ -1286,6 +1286,29 @@ button.tree-nav-link {
   padding-top: 12px;
 }
 
+.sidebar-collapsed-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  color: var(--sidebar-fg-muted);
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.sidebar-collapsed-link:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-fg);
+}
+
+.sidebar-collapsed-link.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-fg);
+}
+
 .sidebar-collapse-btn {
   position: absolute;
   bottom: 12px;
@@ -1915,6 +1938,31 @@ button.tree-nav-link {
   background: rgba(232, 180, 80, 0.28);
 }
 
+/* Pending suggestion highlight — distinct from comment underline so the
+   tech writer can scan which spans have a proposed edit waiting. Gold
+   wavy underline + subtle gold tint, with a wash on hover. */
+.ProseMirror .suggestion-highlight {
+  background: rgba(200, 136, 26, 0.10);
+  text-decoration: underline wavy var(--gold-500);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+.ProseMirror .suggestion-highlight:hover {
+  background: rgba(200, 136, 26, 0.22);
+}
+
+[data-theme="dark"] .ProseMirror .suggestion-highlight {
+  background: rgba(232, 180, 80, 0.10);
+  text-decoration-color: var(--gold-300);
+}
+
+[data-theme="dark"] .ProseMirror .suggestion-highlight:hover {
+  background: rgba(232, 180, 80, 0.22);
+}
+
 /* ── Comments Drawer ── */
 
 .comments-drawer {
@@ -2302,4 +2350,561 @@ button.tree-nav-link {
   font-style: italic;
   color: var(--editorial);
 }
+
+/* ==========================================================================
+   Review surfaces — drawer, tabs, bubble menu, suggestion cards.
+   Extracted from TSX inline styles so you can theme/tweak in one place.
+   ========================================================================== */
+
+/* ── Right-side drawer shell (used by ReviewSidebar) ────────────────────── */
+.review-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 22, 35, 0.18);
+  z-index: 900;
+}
+
+.review-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 92vw;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-drawer);
+  z-index: 901;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.review-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.review-sidebar-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.review-sidebar-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.review-sidebar-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--fg);
+}
+
+/* ── Outer tab bar (Comments | Suggested changes) ──────────────────────── */
+.review-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.review-tab {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.review-tab.active {
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom-color: var(--accent-glow);
+}
+
+.review-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.review-tab.active .review-tab-badge {
+  background: var(--accent-glow);
+  color: var(--cocoa-900);
+}
+
+/* ── Suggestions tab body ───────────────────────────────────────────────── */
+.suggestions-tab-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.suggestion-form {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.suggestion-original {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  font-family: var(--font-serif);
+}
+
+.suggestion-textarea {
+  width: 100%;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.suggestion-note-textarea {
+  width: 100%;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.suggestion-form-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.suggestion-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.suggestions-list {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 20px;
+}
+
+.suggestions-empty {
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-top: 8px;
+}
+
+/* ── Suggestion card ────────────────────────────────────────────────────── */
+.suggestion-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+/* Click-to-jump pulse — fired when the user clicks a highlighted span in
+   the editor body and we want their attention on the matching card. */
+.suggestion-card.active {
+  border-color: var(--accent-glow);
+  box-shadow: 0 0 0 3px var(--gold-tint);
+  animation: suggestion-card-pulse 0.9s ease-out;
+}
+
+@keyframes suggestion-card-pulse {
+  0%   { box-shadow: 0 0 0 0    var(--gold-tint); border-color: var(--accent-glow); }
+  50%  { box-shadow: 0 0 0 6px  var(--gold-tint); }
+  100% { box-shadow: 0 0 0 3px  var(--gold-tint); border-color: var(--accent-glow); }
+}
+
+.suggestion-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.suggestion-card-author {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.suggestion-card-mine {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.suggestion-card-date {
+  margin-left: auto;
+}
+
+.suggestion-card-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-muted);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+/* Collapsed single-line diff (original strikethrough → suggested italic) */
+.suggestion-card-diff {
+  font-size: 13px;
+  line-height: 1.45;
+  font-family: var(--font-serif);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.suggestion-card-diff .diff-original {
+  text-decoration: line-through;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+  flex-shrink: 1;
+}
+
+.suggestion-card-diff .diff-arrow {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.suggestion-card-diff .diff-suggested {
+  color: var(--editorial);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Expanded block view */
+.suggestion-card-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suggestion-card-block {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-serif);
+}
+
+.suggestion-card-block.is-original {
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+
+.suggestion-card-block.is-suggested {
+  color: var(--editorial);
+  font-style: italic;
+}
+
+.suggestion-card-note {
+  font-size: 12px;
+  color: var(--fg-muted);
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+  margin-top: 2px;
+}
+
+.suggestion-card-note.collapsed {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-card-note.expanded {
+  white-space: pre-wrap;
+}
+
+.suggestion-card-status {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.suggestion-card-status.accepted { color: var(--success); }
+.suggestion-card-status.rejected { color: var(--danger); }
+
+.suggestion-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.suggestion-card-error {
+  flex: 1;
+  font-size: 11px;
+  color: var(--danger);
+  text-align: left;
+}
+
+/* Yellow notification badge on sidebar nav items (review queue, etc.) */
+.tree-nav-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+  color: var(--cocoa-900);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Review Queue page (/review) ──────────────────────────────────────── */
+.review-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-queue-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.review-queue-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.review-queue-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-queue-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.review-queue-card-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-light);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.review-queue-card-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.review-queue-card-previews {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.review-queue-preview {
+  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.review-queue-preview-author {
+  color: var(--fg);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.review-queue-preview-arrow {
+  color: var(--fg-muted);
+}
+
+.review-queue-preview-diff {
+  font-family: var(--font-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.review-queue-preview-more {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* ── Floating bubble menu (contributor selection menu) ──────────────────── */
+.bubble-menu {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--cocoa-900);
+  border: 1px solid var(--cocoa-700);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.bubble-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--cocoa-100);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.bubble-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bubble-menu-btn.gold {
+  color: var(--gold-300);
+}
+
+.bubble-menu-btn.gold:hover {
+  background: rgba(232, 180, 80, 0.12);
+}
+
+/* ── Toolbar count badge (overlay on ribbon buttons) ────────────────────── */
+.ribbon-btn-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--accent-glow);
+  color: var(--cocoa-900);
+  font-size: 9px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  min-width: 14px;
+  height: 14px;
+  line-height: 14px;
+  text-align: center;
+  padding: 0 3px;
+}
+
+/* Inline-icon button variant used by Mark-as-done / Review-done */
+.btn-inline-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Review-done state — green outline, click reopens the review */
+.btn-review-done {
+  background: var(--success-light);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+.btn-review-done:hover {
+  background: var(--success-light);
+  opacity: 0.85;
+}
+
+/* Spacing helpers for review surfaces — narrow purpose, kept here so all
+   review-related CSS lives in one block. */
+.faro-label-pad     { margin-bottom: 6px; }
+.faro-label-pad-sm  { margin-bottom: 4px; }
+.review-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.review-list-group + .review-list-group-label {
+  margin-top: 16px;
+}
+.review-list-group-label {
+  margin-bottom: 8px;
+}
+/* Separator gap between Mark-as-done and the per-text actions */
+.ribbon-group-spacer { margin-left: 12px; }
 

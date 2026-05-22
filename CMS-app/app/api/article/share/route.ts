@@ -79,8 +79,16 @@ export async function POST(request: NextRequest) {
     const newlyAdded = emails.filter((e) => !previous.has(e.toLowerCase()));
 
     // Update the TOC entry.
-    if (emails.length > 0) article.assignedTo = emails;
-    else delete article.assignedTo;
+    if (emails.length > 0) {
+      article.assignedTo = emails;
+      // Record who initiated this share so the review-done flow can ping
+      // them later. Falls through to the all-tech-writers broadcast in
+      // /api/article/review-done if senderEmail isn't provided.
+      if (senderEmail) article.assignedBy = senderEmail;
+    } else {
+      delete article.assignedTo;
+      delete article.assignedBy;
+    }
 
     const writeMessage =
       emails.length > 0

@@ -128,6 +128,78 @@ export async function notifyContributorInvited(c: ContributorInvited): Promise<v
   ]);
 }
 
+interface SuggestionResolved {
+  /** Contributor who originally submitted the suggestion. */
+  contributorEmail: string;
+  contributorName?: string;
+  /** Tech writer who accepted/rejected. */
+  resolverName: string;
+  resolverEmail?: string;
+  /** "accept" or "reject" */
+  action: "accept" | "reject";
+  /** A short preview of the suggestion so the contributor remembers it. */
+  originalText: string;
+  suggestedText: string;
+  articleTitle: string;
+  articleFile: string;
+  baseUrl?: string;
+}
+
+/**
+ * Fired when a tech writer accepts or rejects a contributor's suggestion.
+ * Lets the contributor know their proposed edit landed or was declined
+ * without having to refresh the review drawer.
+ */
+export async function notifySuggestionResolved(s: SuggestionResolved): Promise<void> {
+  const firstName = displayName(s.contributorEmail, s.contributorName).split(" ")[0];
+  const greeting = `Hello ${firstName},`;
+  const verb = s.action === "accept" ? "accepted" : "declined";
+  const body =
+    s.action === "accept"
+      ? `${s.resolverName} ${verb} your suggested edit on “${s.articleTitle}”. It's now part of the article.`
+      : `${s.resolverName} ${verb} your suggested edit on “${s.articleTitle}”. Open the article to see other pending suggestions or propose another change.`;
+
+  const link = s.baseUrl
+    ? `${s.baseUrl.replace(/\/$/, "")}/editor/${encodeURIComponent(s.articleFile)}`
+    : null;
+
+  // Truncated preview, single line, in case the suggestion is long.
+  const preview = (txt: string) => (txt.length > 60 ? txt.slice(0, 60) + "…" : txt);
+
+  await Promise.all([
+    sendEmail({
+      to: s.contributorEmail,
+      subject:
+        s.action === "accept"
+          ? `Your suggestion was accepted: ${s.articleTitle}`
+          : `Your suggestion was declined: ${s.articleTitle}`,
+      text:
+        `${greeting}\n\n${body}\n\n` +
+        `Original: ${preview(s.originalText)}\n` +
+        `Suggested: ${preview(s.suggestedText)}` +
+        (link ? `\n\nOpen the article: ${link}` : ""),
+      html:
+        `<p>${greeting}</p>` +
+        `<p>${body}</p>` +
+        `<blockquote style="border-left:3px solid #c8881a;padding-left:10px;color:#5a6a82">` +
+        `<div><s>${preview(s.originalText)}</s></div>` +
+        `<div><em>${preview(s.suggestedText)}</em></div>` +
+        `</blockquote>` +
+        (link
+          ? `<p><a href="${link}">Open <em>${s.articleTitle}</em></a></p>`
+          : ""),
+    }),
+    postSlack({
+      text:
+        s.action === "accept"
+          ? `:white_check_mark: *${displayName(s.contributorEmail, s.contributorName)}* — ${s.resolverName} accepted your suggestion on *${s.articleTitle}*.` +
+            (link ? ` <${link}|Open article>` : "")
+          : `:x: *${displayName(s.contributorEmail, s.contributorName)}* — ${s.resolverName} declined your suggestion on *${s.articleTitle}*.` +
+            (link ? ` <${link}|Open article>` : ""),
+    }),
+  ]);
+}
+
 interface ArticleSharedForReview {
   /** The contributor being asked to review. */
   reviewerEmail: string;
@@ -172,6 +244,66 @@ export async function notifyArticleSharedForReview(
       text:
         `:memo: *${displayName(a.reviewerEmail, a.reviewerName)}* — ` +
         `${a.techWriterName} submitted *${a.articleTitle}* for your review in Faro CMS.` +
+        (link ? ` <${link}|Open article>` : ""),
+    }),
+  ]);
+}
+
+interface ReviewMarkedDone {
+  /** Tech writer(s) to notify — usually just the original assigner. */
+  recipientEmails: string[];
+  /** The contributor who finished the review. */
+  reviewerEmail: string;
+  reviewerName?: string;
+  articleTitle: string;
+  articleFile: string;
+  baseUrl?: string;
+  /** Counts so the tech writer knows where the article stands. */
+  reviewsDoneCount: number;
+  totalReviewers: number;
+}
+
+/**
+ * Fired when a contributor flips Mark-as-done on an article they were
+ * assigned to. Lands one email per recipient + a single Slack post that
+ * tags them all.
+ */
+export async function notifyReviewMarkedDone(n: ReviewMarkedDone): Promise<void> {
+  if (n.recipientEmails.length === 0) return;
+  const reviewerLabel = displayName(n.reviewerEmail, n.reviewerName);
+  const allDone = n.reviewsDoneCount === n.totalReviewers;
+  const progress = `${n.reviewsDoneCount}/${n.totalReviewers}`;
+  const link = n.baseUrl
+    ? `${n.baseUrl.replace(/\/$/, "")}/editor/${encodeURIComponent(n.articleFile)}`
+    : null;
+
+  const subject = allDone
+    ? `Review complete: ${n.articleTitle}`
+    : `Review progress (${progress}): ${n.articleTitle}`;
+
+  const body = allDone
+    ? `${reviewerLabel} marked the review of "${n.articleTitle}" as done. All assigned reviewers have signed off (${progress}).`
+    : `${reviewerLabel} marked the review of "${n.articleTitle}" as done. Reviewer progress: ${progress}.`;
+
+  await Promise.all([
+    ...n.recipientEmails.map((to) =>
+      sendEmail({
+        to,
+        subject,
+        text:
+          `${body}` +
+          (link ? `\n\nOpen the article: ${link}` : ""),
+        html:
+          `<p>${body}</p>` +
+          (link
+            ? `<p><a href="${link}">Open <em>${n.articleTitle}</em></a></p>`
+            : ""),
+      })
+    ),
+    postSlack({
+      text:
+        (allDone ? ":white_check_mark:" : ":eyes:") +
+        ` *${reviewerLabel}* marked the review of *${n.articleTitle}* done (${progress}).` +
         (link ? ` <${link}|Open article>` : ""),
     }),
   ]);

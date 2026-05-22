@@ -37,6 +37,15 @@ interface CommentsDrawerProps {
   onSetActiveComment: (id: string | null) => void;
   /** Text currently selected in the editor — used for new comments */
   pendingHighlight: string | null;
+  /** Author label stamped on new comments + replies (e.g. "Nolwenn Marjou"). */
+  authorLabel?: string;
+  /**
+   * When true the drawer renders only its inner content (tabs + new form +
+   * list) without the outer positioned shell or header — meant for embedding
+   * inside the unified ReviewSidebar. When false (default) it behaves as a
+   * standalone drawer with its own backdrop and chrome.
+   */
+  embedded?: boolean;
   onClearPending: () => void;
 }
 
@@ -75,6 +84,8 @@ export default function CommentsDrawer({
   onSetActiveComment,
   pendingHighlight,
   onClearPending,
+  authorLabel = "You",
+  embedded = false,
 }: CommentsDrawerProps) {
   const [newText, setNewText] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -107,7 +118,7 @@ export default function CommentsDrawer({
       id,
       highlightedText: pendingHighlight,
       text: newText.trim(),
-      author: "You",
+      author: authorLabel,
       createdAt: new Date().toISOString(),
       resolved: false,
       replies: [],
@@ -120,7 +131,7 @@ export default function CommentsDrawer({
     setNewText("");
     onClearPending();
     onSetActiveComment(id);
-  }, [newText, pendingHighlight, editor, onAddComment, onClearPending, onSetActiveComment]);
+  }, [newText, pendingHighlight, editor, onAddComment, onClearPending, onSetActiveComment, authorLabel]);
 
   const handleAddReply = useCallback((commentId: string) => {
     if (!replyText.trim()) return;
@@ -129,7 +140,7 @@ export default function CommentsDrawer({
 
     const reply: CommentReply = {
       id: generateId(),
-      author: "You",
+      author: authorLabel,
       text: replyText.trim(),
       createdAt: new Date().toISOString(),
     };
@@ -140,7 +151,7 @@ export default function CommentsDrawer({
     });
     setReplyText("");
     setReplyingTo(null);
-  }, [replyText, comments, onUpdateComment]);
+  }, [replyText, comments, onUpdateComment, authorLabel]);
 
   const handleResolve = useCallback((commentId: string) => {
     const comment = comments.find((c) => c.id === commentId);
@@ -186,22 +197,8 @@ export default function CommentsDrawer({
   const resolvedComments = comments.filter((c) => c.resolved);
   const displayComments = showResolved ? resolvedComments : activeComments;
 
-  return (
-    <div className={`comments-drawer${open ? " open" : ""}`}>
-      {/* Header */}
-      <div className="comments-drawer-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="chat-circle" size={16} />
-          <span style={{ fontWeight: 600, fontSize: 14 }}>Comments</span>
-          {activeComments.length > 0 && (
-            <span className="comments-badge">{activeComments.length}</span>
-          )}
-        </div>
-        <button onClick={onClose} className="comments-close-btn" title="Close">
-          &times;
-        </button>
-      </div>
-
+  const body = (
+    <>
       {/* Tab bar */}
       <div className="comments-tabs">
         <button
@@ -398,6 +395,31 @@ export default function CommentsDrawer({
           );
         })}
       </div>
+    </>
+  );
+
+  // Embedded mode (inside ReviewSidebar): just return the body. The host
+  // owns the drawer shell + header. Skips when closed in standalone mode.
+  if (embedded) {
+    if (!open) return null;
+    return <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>{body}</div>;
+  }
+
+  return (
+    <div className={`comments-drawer${open ? " open" : ""}`}>
+      <div className="comments-drawer-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="chat-circle" size={16} />
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Comments</span>
+          {activeComments.length > 0 && (
+            <span className="comments-badge">{activeComments.length}</span>
+          )}
+        </div>
+        <button onClick={onClose} className="comments-close-btn" title="Close">
+          &times;
+        </button>
+      </div>
+      {body}
     </div>
   );
 }

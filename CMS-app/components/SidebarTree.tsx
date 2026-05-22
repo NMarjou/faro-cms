@@ -24,6 +24,35 @@ export default function SidebarTree() {
   // Treat unknown / unloaded as tech-writer so the chrome doesn't flicker
   // empty during the brief load. Contributors render the limited shell.
   const isContributor = role === "contributor";
+
+  // Review-queue badge — tech writers see a count of pending suggestions
+  // across all articles. Cheap GET; refreshed on identity change and via
+  // the same `cms-identity-changed` custom event other surfaces listen for.
+  const [reviewPending, setReviewPending] = useState(0);
+  useEffect(() => {
+    if (isContributor) return;
+    let cancelled = false;
+    const fetchCount = () => {
+      fetch("/api/suggestions")
+        .then((r) => (r.ok ? r.json() : { totalPending: 0 }))
+        .then((d: { totalPending?: number }) => {
+          if (!cancelled) setReviewPending(d.totalPending || 0);
+        })
+        .catch(() => {});
+    };
+    fetchCount();
+    // Refresh when navigation happens (cheap signal that something may have
+    // been accepted/rejected in the editor). The custom event is already
+    // wired by CurrentUserProvider for identity changes; re-using it here.
+    const handler = () => fetchCount();
+    window.addEventListener("cms-identity-changed", handler);
+    window.addEventListener("focus", handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("cms-identity-changed", handler);
+      window.removeEventListener("focus", handler);
+    };
+  }, [isContributor]);
   const [toc, setToc] = useState<Toc | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ name: string; file: string } | null>(null);
@@ -276,22 +305,24 @@ export default function SidebarTree() {
             <span className="tree-label">{category.name}</span>
             <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
           </div>
-          <button
-            className="tree-add-btn tree-add-btn-hover"
-            title={`New section in ${category.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded((prev) => new Set([...prev, key]));
-              startCreating({ type: "section", categorySlug: category.slug });
-            }}
-          >
-            +
-          </button>
+          {!isContributor && (
+            <button
+              className="tree-add-btn tree-add-btn-hover"
+              title={`New section in ${category.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded((prev) => new Set([...prev, key]));
+                startCreating({ type: "section", categorySlug: category.slug });
+              }}
+            >
+              +
+            </button>
+          )}
         </div>
         {isOpen && (
           <div className="tree-children">
             {category.sections.map((s) => renderSection(s, category.slug))}
-            {creatingAt?.type === "section" && creatingAt.categorySlug === category.slug && (
+            {!isContributor && creatingAt?.type === "section" && creatingAt.categorySlug === category.slug && (
               <InlineFolderInput />
             )}
           </div>
@@ -427,16 +458,54 @@ export default function SidebarTree() {
   }, []);
 
   if (collapsed) {
+    // Icon-only nav for the collapsed rail. Same role-gating as the expanded
+    // sidebar so a contributor sees the same shortened set, just compact.
+    const navItem = (href: string, icon: string, label: string, isActive: boolean) => (
+      <Link
+        key={href}
+        href={href}
+        title={label}
+        className={`sidebar-collapsed-link${isActive ? " active" : ""}`}
+      >
+        <Icon name={icon} size={16} />
+      </Link>
+    );
+    const articlesActive = !!pathname?.startsWith("/articles") || !!pathname?.startsWith("/editor");
     return (
       <aside className="sidebar sidebar-collapsed">
         <div style={{ padding: "12px 0 8px", display: "flex", justifyContent: "center", cursor: "pointer" }} onClick={() => setCollapsed(false)} title="Expand sidebar">
           <FaroLogo size={24} showWordmark={false} />
         </div>
+        <nav style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, marginTop: 8, flex: 1, overflow: "hidden auto", width: "100%" }}>
+          {navItem("/", "squares-four", "Dashboard", pathname === "/")}
+          {navItem("/articles", "file-text", "Articles", articlesActive)}
+          {!isContributor && (
+            <>
+              {navItem("/snippets", "scissors", "Snippets", pathname === "/snippets")}
+              {navItem("/images", "image-square", "Images", pathname === "/images")}
+              {navItem("/variables", "brackets-curly", "Variables", pathname === "/variables")}
+              {navItem("/toc", "list", "TOCs", pathname === "/toc")}
+            </>
+          )}
+          {navItem("/glossary", "book-open", "Glossary", pathname === "/glossary")}
+          {navItem("/search", "magnifying-glass", "Search", pathname === "/search")}
+          {!isContributor && (
+            <>
+              {navItem("/publish", "cloud-arrow-up", "Publish", pathname === "/publish")}
+              {navItem("/import", "download-simple", "Import", pathname === "/import")}
+              {navItem("/link-mapper", "link", "Link Mapper", pathname === "/link-mapper")}
+              {navItem("/qa", "check-circle", "QA", pathname === "/qa")}
+              {navItem("/review", "git-pull-request", `Review Queue${reviewPending ? ` (${reviewPending})` : ""}`, pathname === "/review")}
+            </>
+          )}
+          {navItem("/settings", "user", "User Settings", pathname === "/settings")}
+          {!isContributor && navItem("/settings/platform", "gear", "Platform Settings", pathname === "/settings/platform")}
+        </nav>
         <button
           onClick={() => setCollapsed(false)}
           className="sidebar-expand-btn"
           title="Expand sidebar"
-          style={{ marginTop: "auto" }}
+          style={{ marginTop: 8 }}
         >
           <Icon name="sidebar-simple" size={18} />
         </button>
@@ -490,9 +559,8 @@ export default function SidebarTree() {
           Dashboard
         </Link>
 
-        {/* CONTENT — hidden for contributors */}
-        {!isContributor && (
-        <>
+        {/* CONTENT section. Articles is visible to everyone (contributors
+            get a read-only view); the rest are tech-writer only. */}
         <div className="tree-section-label">CONTENT</div>
 
         {/* Articles — expandable with article tree inside */}
@@ -502,17 +570,19 @@ export default function SidebarTree() {
               <Icon name="file-text" />
               Articles
             </Link>
-            <button
-              className="tree-add-btn tree-add-btn-hover"
-              title="New category"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded((prev) => new Set([...prev, "nav:articles"]));
-                startCreating({ type: "category" });
-              }}
-            >
-              +
-            </button>
+            {!isContributor && (
+              <button
+                className="tree-add-btn tree-add-btn-hover"
+                title="New category"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded((prev) => new Set([...prev, "nav:articles"]));
+                  startCreating({ type: "category" });
+                }}
+              >
+                +
+              </button>
+            )}
             <button className="tree-expand-btn" onClick={() => toggle("nav:articles")} title="Expand articles">
               <span className={`tree-arrow${expanded.has("nav:articles") ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
             </button>
@@ -522,7 +592,7 @@ export default function SidebarTree() {
               {toc ? (
                 <>
                   {toc.categories.map((cat) => renderCategory(cat))}
-                  {creatingAt?.type === "category" && <InlineFolderInput />}
+                  {!isContributor && creatingAt?.type === "category" && <InlineFolderInput />}
                   {toc.articles && toc.articles.length > 0 && (
                     <div className="tree-node">
                       <div className="tree-section-label" style={{ marginTop: 4, fontSize: 10 }}>
@@ -542,6 +612,10 @@ export default function SidebarTree() {
             </div>
           )}
         </div>
+
+        {/* Snippets / Images / Variables / TOCs — tech writer only */}
+        {!isContributor && (
+        <>
 
         {/* Snippets — expandable tree */}
         <div className="tree-node">
@@ -713,6 +787,14 @@ export default function SidebarTree() {
         <Link href="/qa" className={`tree-nav-link${pathname === "/qa" ? " active" : ""}`}>
           <Icon name="check-circle" />
           QA
+        </Link>
+
+        <Link href="/review" className={`tree-nav-link${pathname === "/review" ? " active" : ""}`}>
+          <Icon name="git-pull-request" />
+          Review Queue
+          {reviewPending > 0 && (
+            <span className="tree-nav-badge">{reviewPending}</span>
+          )}
         </Link>
         </>
         )}
