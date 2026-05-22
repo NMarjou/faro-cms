@@ -17,7 +17,10 @@
               "assignedTo": [
                 "test.contributor@example.com"
               ],
-              "assignedBy": "nolwenn.marjou@beqom.com"
+              "assignedBy": "nolwenn.marjou@beqom.com",
+              "reviewsDone": [
+                "test.contributor@example.com"
+              ]
             }
           ]
         },
