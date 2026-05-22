@@ -20,6 +20,17 @@
       "suggestedText": "the Passport app",
       "status": "pending",
       "occurrenceIndex": 1
+    },
+    {
+      "id": "sug_mpgklxz0_ny65if",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-22T07:00:43.452Z",
+      "originalText": "goals",
+      "suggestedText": "objectives",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "More formal"
     }
   ]
 }
