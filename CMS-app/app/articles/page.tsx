@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Toc, TocCategory, TocArticle } from "@/lib/types";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 
 export default function ArticlesPage() {
+  const { role } = useCurrentUser();
+  const isContributor = role === "contributor";
   const [toc, setToc] = useState<Toc | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
@@ -62,9 +65,11 @@ export default function ArticlesPage() {
     <>
       <header className="main-header">
         <h1>Articles</h1>
-        <Link href="/articles/new" className="btn btn-primary">
-          New Article
-        </Link>
+        {!isContributor && (
+          <Link href="/articles/new" className="btn btn-primary">
+            New Article
+          </Link>
+        )}
       </header>
       <div className="main-body">
         {loading && <p>Loading articles...</p>}
@@ -164,21 +169,58 @@ export default function ArticlesPage() {
                           {expandedSections.has(section.slug) && (
                             <div style={{ paddingLeft: 24 }}>
                               {section.articles.map(
-                                (article: TocArticle) => (
-                                  <Link
-                                    key={article.slug}
-                                    href={`/editor/${encodeURIComponent(article.file)}`}
-                                    style={{
-                                      display: "block",
-                                      padding: "6px 12px",
-                                      fontSize: 14,
-                                      borderRadius: "var(--radius)",
-                                      color: "var(--fg)",
-                                    }}
-                                  >
-                                    {article.title}
-                                  </Link>
-                                )
+                                (article: TocArticle) => {
+                                  const reviewDone =
+                                    !!article.reviewsDone && article.reviewsDone.length > 0;
+                                  const allReviewersDone =
+                                    reviewDone &&
+                                    article.assignedTo &&
+                                    article.assignedTo.length === article.reviewsDone!.length;
+                                  return (
+                                    <Link
+                                      key={article.slug}
+                                      href={`/editor/${encodeURIComponent(article.file)}`}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        padding: "6px 12px",
+                                        fontSize: 14,
+                                        borderRadius: "var(--radius)",
+                                        color: "var(--fg)",
+                                        background: reviewDone
+                                          ? "var(--success-light)"
+                                          : undefined,
+                                        borderLeft: reviewDone
+                                          ? "3px solid var(--success)"
+                                          : "3px solid transparent",
+                                      }}
+                                    >
+                                      <span style={{ flex: 1 }}>{article.title}</span>
+                                      {reviewDone && (
+                                        <span
+                                          title={`Review done by: ${article.reviewsDone!.join(", ")}`}
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            color: "var(--success)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: 4,
+                                          }}
+                                        >
+                                          ✓ Review done
+                                          {article.assignedTo && article.assignedTo.length > 0 && (
+                                            <span style={{ opacity: 0.75, fontWeight: 500 }}>
+                                              ({article.reviewsDone!.length}/{article.assignedTo.length})
+                                            </span>
+                                          )}
+                                          {allReviewersDone && <span style={{ marginLeft: 2 }}>·</span>}
+                                        </span>
+                                      )}
+                                    </Link>
+                                  );
+                                }
                               )}
                             </div>
                           )}

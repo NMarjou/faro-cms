@@ -45,6 +45,23 @@ interface ToolbarProps {
   onSpellClose?: () => void;
   spellWordCount?: number;
   spellAddedCount?: number;
+  // Toolbar mode — "full" is the tech-writer ribbon; "review" is the
+  // contributor's light variant (Comment + Suggest Changes only).
+  mode?: "full" | "review";
+  onSuggestChanges?: () => void;
+  pendingSuggestionsCount?: number;
+  /** True when the review sidebar is currently open on the Suggestions tab —
+   *  drives the active state on the Suggest Changes toolbar button. */
+  showSuggestions?: boolean;
+  // ── Mark-as-done flow (contributor only) ──────────────────────────────
+  /** Show the Mark-as-done button at all (i.e. the current user is a
+   *  contributor assigned to this article). */
+  canMarkReviewDone?: boolean;
+  /** True if the current user has already marked their review done. */
+  reviewDone?: boolean;
+  /** Reason the button is unavailable, used as the disabled tooltip. */
+  markDoneBlockedReason?: string | null;
+  onMarkReviewDone?: () => void;
 }
 
 // Editor ribbon icons — Phosphor names per the Faro Design System mapping.
@@ -198,11 +215,96 @@ export default function Toolbar({
   onSpellClose,
   spellWordCount = 0,
   spellAddedCount = 0,
+  mode = "full",
+  onSuggestChanges,
+  pendingSuggestionsCount = 0,
+  showSuggestions = false,
+  canMarkReviewDone = false,
+  reviewDone = false,
+  markDoneBlockedReason = null,
+  onMarkReviewDone,
 }: ToolbarProps) {
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [showLinkPicker, setShowLinkPicker] = useState(false);
 
   if (!editor) return null;
+
+  // Contributor's light variant. Only the Comment button and a Suggest
+  // Changes stub — no formatting, no structure tools, no source view.
+  if (mode === "review") {
+    const hasSelection = editor.state.selection.from !== editor.state.selection.to;
+    return (
+      <div className="ribbon">
+        {/* Right-align the lone review section so the toolbar reads as a
+            compact action cluster at the trailing edge of the ribbon,
+            leaving room for any future left-aligned chrome. */}
+        <div className="ribbon-section" style={{ marginLeft: "auto" }}>
+          <div className="ribbon-section-label" style={{ textAlign: "right" }}>Review</div>
+          <div className="ribbon-row">
+            <div className="ribbon-group">
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  if (hasSelection) onAddComment?.();
+                  else onToggleComments?.();
+                }}
+                title={hasSelection ? "Comment on selection" : "Toggle comments drawer"}
+                className={`ribbon-btn${showComments ? " active" : ""}`}
+                style={{ position: "relative" }}
+              >
+                <Icon name="chat-circle" size={15} title="Comment" />
+                {commentCount > 0 && (
+                  <span className="ribbon-btn-badge">{commentCount}</span>
+                )}
+              </button>
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSuggestChanges?.()}
+                title="Submit your proposed edits to the tech writer for review"
+                className={`ribbon-btn${showSuggestions ? " active" : ""}`}
+                disabled={!onSuggestChanges}
+                style={{ position: "relative" }}
+              >
+                <Icon name="git-pull-request" size={15} title="Suggest changes" />
+                {pendingSuggestionsCount > 0 && (
+                  <span className="ribbon-btn-badge">{pendingSuggestionsCount}</span>
+                )}
+              </button>
+            </div>
+            {/* Mark as done — only shown to the assigned contributor.
+                Pushed to the right of the ribbon row so it reads as the
+                terminal "complete the review" action, distinct from the
+                per-text actions on the left. Disabled until everything
+                outstanding has been resolved. */}
+            {canMarkReviewDone && (
+              <div className="ribbon-group ribbon-group-spacer">
+                {reviewDone ? (
+                  <button
+                    onClick={() => onMarkReviewDone?.()}
+                    title="Reopen the review (re-enables comments and suggestions)"
+                    className="btn btn-sm btn-inline-icon btn-review-done"
+                  >
+                    <Icon name="check-circle" weight="fill" size={14} />
+                    Review done
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onMarkReviewDone?.()}
+                    disabled={!!markDoneBlockedReason || !onMarkReviewDone}
+                    title={markDoneBlockedReason || "Finish the review and send the article back to the tech writer"}
+                    className="btn btn-sm btn-gold btn-inline-icon"
+                  >
+                    <Icon name="check" weight="bold" size={14} />
+                    Mark as done
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const selectedText = (() => {
     const { from, to } = editor.state.selection;
@@ -402,6 +504,7 @@ export default function Toolbar({
             </div>
             <div className="ribbon-group">
               <button
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   const { from, to } = editor.state.selection;
                   if (from !== to) {
@@ -419,24 +522,20 @@ export default function Toolbar({
               >
                 <Icon name="chat-circle" size={15} title="Comments" />
                 {commentCount > 0 && (
-                  <span style={{
-                    position: "absolute",
-                    top: -4,
-                    right: -4,
-                    background: "var(--accent)",
-                    color: "var(--paper-50)",
-                    fontSize: 9,
-                    fontFamily: "var(--font-sans)",
-                    fontWeight: 700,
-                    borderRadius: 99,
-                    minWidth: 14,
-                    height: 14,
-                    lineHeight: "14px",
-                    textAlign: "center",
-                    padding: "0 3px",
-                  }}>
-                    {commentCount}
-                  </span>
+                  <span className="ribbon-btn-badge">{commentCount}</span>
+                )}
+              </button>
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSuggestChanges?.()}
+                title="Suggested changes from contributors"
+                className={`ribbon-btn${showSuggestions ? " active" : ""}`}
+                disabled={!onSuggestChanges}
+                style={{ position: "relative" }}
+              >
+                <Icon name="git-pull-request" size={15} title="Suggested changes" />
+                {pendingSuggestionsCount > 0 && (
+                  <span className="ribbon-btn-badge">{pendingSuggestionsCount}</span>
                 )}
               </button>
             </div>

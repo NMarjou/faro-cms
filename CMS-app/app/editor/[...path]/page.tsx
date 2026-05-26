@@ -81,8 +81,12 @@ export default function EditorPage() {
   const router = useRouter();
   const pathSegments = params.path as string[];
   const filePath = pathSegments.map(decodeURIComponent).join("/");
-  const { role } = useCurrentUser();
-  const isContributor = role === "contributor";
+  const { role, loaded: userLoaded } = useCurrentUser();
+  // Default to "contributor" while the identity is still resolving — gives
+  // contributors a stable read-only mount instead of a brief editable flash
+  // and prevents the tech-writer toolbar from appearing for a frame. Tech
+  // writers see the full toolbar as soon as their role lands.
+  const isContributor = !userLoaded || role === "contributor";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -517,6 +521,30 @@ export default function EditorPage() {
           ) : lastAutoSaved ? (
             <span style={{ fontSize: 11, color: "var(--fg-muted)" }}>Saved {lastAutoSaved}</span>
           ) : null}
+          {/* Review-done indicator. Shows to anyone who opens the article:
+              the contributor sees their own status mirrored from the
+              toolbar; the tech writer sees which reviewers have signed off. */}
+          {articleMeta?.reviewsDone && articleMeta.reviewsDone.length > 0 && (
+            <span
+              className="badge"
+              style={{
+                background: "var(--success-light)",
+                color: "var(--success)",
+                border: "1px solid var(--success)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+              title={`Review done by: ${articleMeta.reviewsDone.join(", ")}`}
+            >
+              ✓ Review done
+              {articleMeta.assignedTo && articleMeta.assignedTo.length > 0 && (
+                <span style={{ opacity: 0.8, fontWeight: 500 }}>
+                  ({articleMeta.reviewsDone.length}/{articleMeta.assignedTo.length})
+                </span>
+              )}
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
@@ -679,8 +707,21 @@ export default function EditorPage() {
         )}
 
         {/* Editor or Source */}
-        {viewMode === "visual" && (
+        {viewMode === "visual" && !userLoaded && (
+          <div style={{ padding: 24, color: "var(--fg-muted)", fontSize: 13 }}>
+            Loading editor…
+          </div>
+        )}
+        {viewMode === "visual" && userLoaded && (
           <Editor
+            filePath={filePath}
+            assignedTo={articleMeta?.assignedTo}
+            reviewsDone={articleMeta?.reviewsDone}
+            onReviewDoneChanged={(next) =>
+              setArticleMeta((p) =>
+                p ? { ...p, reviewsDone: next.length > 0 ? next : undefined } : p
+              )
+            }
             initialContent={format === "html" ? undefined : initialContent || undefined}
             initialHtml={format === "html" ? initialHtml : undefined}
             variables={variables}
@@ -692,8 +733,12 @@ export default function EditorPage() {
             onChange={handleEditorChange}
             onSave={handleSave}
             onEditorReady={(editor) => { editorRef.current = { getHTML: () => editor.getHTML(), getSelectedText: () => editor.getSelectedText(), setContent: (html: string) => { editor.commands.setContent(html); } }; }}
-            viewMode={viewMode}
-            onViewModeChange={(mode) => {
+            mode={isContributor ? "review" : "full"}
+            // Editor.tsx owns the unified ReviewSidebar + handler internally;
+            // we don't pass onSuggestChanges so the internal handler wins.
+            // Contributors get no source-view toggle — they shouldn't see raw HTML.
+            viewMode={isContributor ? undefined : viewMode}
+            onViewModeChange={isContributor ? undefined : (mode) => {
               if (mode === "source") {
                 const selectedText = editorRef.current?.getSelectedText() || "";
                 if (isDirty) handleSave();
