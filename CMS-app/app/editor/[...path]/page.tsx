@@ -8,7 +8,6 @@ import Icon from "@/components/Icon";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import type {
   Variables,
-  ConditionsConfig,
   GlossaryTerm,
   ContentStyle,
   TocArticle,
@@ -140,10 +139,18 @@ export default function EditorPage() {
     if (loadedRef.current) return;
     loadedRef.current = true;
 
-    async function load() {
+    // Fire requests in parallel so the editor can mount as soon as the
+    // article body resolves. Metadata streams in afterwards and the Toolbar
+    // updates when props change. The 5 toolbar-metadata reads are bundled
+    // into /api/editor-meta to dodge the browser 6-connection limit and
+    // per-route dev-compile cost.
+    const articlePromise = fetch(`/api/article?path=${encodeURIComponent(filePath)}`);
+    const tocPromise = isSnippet ? null : fetch("/api/toc").catch(() => null);
+    const metaPromise = fetch("/api/editor-meta").catch(() => null);
+
+    (async () => {
       try {
-        // Load article content
-        const articleRes = await fetch(`/api/article?path=${encodeURIComponent(filePath)}`);
+        const articleRes = await articlePromise;
         if (!articleRes.ok) throw new Error("Failed to load article");
         const articleData = await articleRes.json();
 
@@ -151,11 +158,9 @@ export default function EditorPage() {
         setFormat(isHtml ? "html" : "mdx");
 
         if (isHtml) {
-          // HTML: pass directly to TipTap
           setInitialHtml(articleData.content);
           setRawSource(articleData.content);
         } else {
-          // MDX: parse via server API
           setRawSource(articleData.raw);
           const parseRes = await fetch("/api/article/parse", {
             method: "POST",
@@ -172,63 +177,43 @@ export default function EditorPage() {
           if (articleData.frontmatter?.name) {
             setSnippetTitle(articleData.frontmatter.name);
           } else {
-            // Try HTML comment format: <!--name:My Snippet-->
             const raw = articleData.content || articleData.raw || "";
             const m = raw.match(/<!--\s*name:\s*(.+?)\s*-->/);
             if (m) setSnippetTitle(m[1]);
           }
-        } else {
-          const tocRes = await fetch("/api/toc");
-          if (tocRes.ok) {
-            const toc: Toc = await tocRes.json();
-            const found = findArticleInToc(toc, filePath);
-            if (found) {
-              setArticleMeta(found);
-              setOriginalMeta({ ...found });
-            }
-          }
-        }
-
-        // Load metadata in parallel
-        const [varsRes, condsRes, glossaryRes, stylesRes, snippetsRes] = await Promise.all([
-          fetch("/api/variables").catch(() => null),
-          fetch("/api/content?path=conditions.json").catch(() => null),
-          fetch("/api/glossary").catch(() => null),
-          fetch("/api/content?path=styles.json").catch(() => null),
-          fetch("/api/snippets").catch(() => null),
-        ]);
-
-        if (varsRes?.ok) setVariables(await varsRes.json());
-        if (condsRes?.ok) {
-          try {
-            const d = await condsRes.json();
-            const c: ConditionsConfig = d.content ? JSON.parse(d.content) : d;
-            setConditionTags(c.tags || []);
-            setConditionColors(c.colors || {});
-          } catch { /* */ }
-        }
-        if (glossaryRes?.ok) {
-          const g = await glossaryRes.json();
-          setGlossaryTerms(g.terms || []);
-        }
-        if (stylesRes?.ok) {
-          try {
-            const d = await stylesRes.json();
-            const s = d.content ? JSON.parse(d.content) : d;
-            setStyles(Array.isArray(s) ? s : []);
-          } catch { /* */ }
-        }
-        if (snippetsRes?.ok) {
-          try { const snips = await snippetsRes.json(); const list = snips.snippets || snips; setSnippetNames(list.map((s: { name: string }) => s.name)); } catch { /* */ }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
         setLoading(false);
       }
-    }
-    load();
-  }, [filePath]);
+    })();
+
+    tocPromise?.then(async (res) => {
+      if (!res?.ok) return;
+      try {
+        const toc: Toc = await res.json();
+        const found = findArticleInToc(toc, filePath);
+        if (found) {
+          setArticleMeta(found);
+          setOriginalMeta({ ...found });
+        }
+      } catch { /* */ }
+    });
+
+    metaPromise.then(async (res) => {
+      if (!res?.ok) return;
+      try {
+        const meta = await res.json();
+        setVariables(meta.variables || {});
+        setConditionTags(meta.conditions?.tags || []);
+        setConditionColors(meta.conditions?.colors || {});
+        setGlossaryTerms(meta.glossary?.terms || []);
+        setStyles(Array.isArray(meta.styles) ? meta.styles : []);
+        setSnippetNames(meta.snippetNames || []);
+      } catch { /* */ }
+    });
+  }, [filePath, isSnippet]);
 
   function findArticleInToc(toc: Toc, file: string): TocArticle | null {
     for (const cat of toc.categories) {

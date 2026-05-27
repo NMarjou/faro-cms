@@ -35,7 +35,7 @@ export default function SnippetsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadSnippets = () => {
-    fetch("/api/snippets")
+    fetch("/api/snippets?full=1")
       .then((r) => r.json())
       .then((d: SnippetsData) => {
         setData(d);

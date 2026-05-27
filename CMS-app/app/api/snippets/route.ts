@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFilesRecursive, getFile, putFile } from "@/lib/storage";
+import { listFilesRecursive, getFile, putFile, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
+import { memoize } from "@/lib/cache";
 import matter from "gray-matter";
+
+type SnippetEntry = { name: string; file: string; folder: string };
+type SnippetListing = { folders: string[]; snippets: SnippetEntry[] };
+
+function basenameNoExt(filePath: string): string {
+  const basename = filePath.split("/").pop() || filePath;
+  return basename.replace(/\.(html|mdx)$/, "");
+}
 
 function extractSnippetName(content: string, filePath: string): string {
   const htmlMatch = content.match(/<!--\s*name:\s*(.+?)\s*-->/);
@@ -11,8 +20,7 @@ function extractSnippetName(content: string, filePath: string): string {
     if (data.name) return data.name;
   } catch { /* not MDX */ }
 
-  const basename = filePath.split("/").pop() || filePath;
-  return basename.replace(/\.(html|mdx)$/, "");
+  return basenameNoExt(filePath);
 }
 
 async function loadOrder(folder: string): Promise<string[]> {
@@ -25,67 +33,86 @@ async function loadOrder(folder: string): Promise<string[]> {
   }
 }
 
-function sortByOrder(items: { name: string; file: string; folder: string }[], order: string[]): typeof items {
-  if (order.length === 0) return items;
-  const orderMap = new Map(order.map((f, i) => [f, i]));
-  return [...items].sort((a, b) => {
-    const aIdx = orderMap.get(a.file) ?? 999;
-    const bIdx = orderMap.get(b.file) ?? 999;
-    return aIdx - bIdx;
+async function buildListing(full: boolean): Promise<SnippetListing> {
+  const files = await listFilesRecursive("content/snippets");
+  const folderSet = new Set<string>();
+  const candidates: { filePath: string; relPath: string; folder: string }[] = [];
+
+  for (const filePath of files) {
+    const relPath = filePath.replace(/^content\//, "");
+    const parts = relPath.replace(/^snippets\//, "").split("/");
+    const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+
+    if (folder) {
+      const segments = folder.split("/");
+      for (let i = 1; i <= segments.length; i++) {
+        folderSet.add(segments.slice(0, i).join("/"));
+      }
+    }
+
+    if (!filePath.endsWith(".mdx") && !filePath.endsWith(".html")) continue;
+    candidates.push({ filePath, relPath, folder });
+  }
+
+  // Lite mode (default for editor) derives names from filename — avoids
+  // N+1 reads with hundreds of snippets. Full mode (snippets manager,
+  // sidebar) reads each file to honor explicit `name:` frontmatter/comments,
+  // but parallelized.
+  let snippets: SnippetEntry[];
+  if (full) {
+    snippets = await Promise.all(
+      candidates.map(async ({ filePath, relPath, folder }) => {
+        try {
+          const raw = await getFile(filePath);
+          return { name: extractSnippetName(raw.content, filePath), file: relPath, folder };
+        } catch {
+          return { name: basenameNoExt(filePath), file: relPath, folder };
+        }
+      })
+    );
+  } else {
+    snippets = candidates.map(({ filePath, relPath, folder }) => ({
+      name: basenameNoExt(filePath),
+      file: relPath,
+      folder,
+    }));
+  }
+
+  // Apply per-folder ordering. Read all .order.json files in parallel.
+  const folders = [...folderSet].sort();
+  const allFolders = ["", ...folders];
+  const orderEntries = await Promise.all(
+    allFolders.map(async (f) => [f, await loadOrder(f)] as const)
+  );
+  const orderCache = new Map(orderEntries);
+
+  snippets.sort((a, b) => {
+    if (a.folder !== b.folder) return 0;
+    const order = orderCache.get(a.folder) || [];
+    if (order.length === 0) return 0;
+    const aIdx = order.indexOf(a.file);
+    const bIdx = order.indexOf(b.file);
+    return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
   });
+
+  return { folders, snippets };
 }
 
-export async function GET() {
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+};
+
+export async function GET(request: NextRequest) {
+  const full = request.nextUrl.searchParams.get("full") === "1";
+
   try {
-    const files = await listFilesRecursive("content/snippets");
-    const snippets: { name: string; file: string; folder: string }[] = [];
-    const folderSet = new Set<string>();
-
-    for (const filePath of files) {
-      const relPath = filePath.replace(/^content\//, "");
-      const parts = relPath.replace(/^snippets\//, "").split("/");
-      const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
-
-      if (folder) {
-        const segments = folder.split("/");
-        for (let i = 1; i <= segments.length; i++) {
-          folderSet.add(segments.slice(0, i).join("/"));
-        }
-      }
-
-      if (!filePath.endsWith(".mdx") && !filePath.endsWith(".html")) continue;
-      try {
-        const raw = await getFile(filePath);
-        snippets.push({
-          name: extractSnippetName(raw.content, filePath),
-          file: relPath,
-          folder,
-        });
-      } catch {
-        // skip
-      }
-    }
-
-    // Apply per-folder ordering
-    const folders = [...folderSet].sort();
-    const allFolders = ["", ...folders];
-    const orderCache = new Map<string, string[]>();
-    for (const f of allFolders) {
-      orderCache.set(f, await loadOrder(f));
-    }
-
-    const sortedSnippets = snippets.sort((a, b) => {
-      if (a.folder !== b.folder) return 0;
-      const order = orderCache.get(a.folder) || [];
-      if (order.length === 0) return 0;
-      const aIdx = order.indexOf(a.file);
-      const bIdx = order.indexOf(b.file);
-      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
-    });
-
-    return NextResponse.json({ folders, snippets: sortedSnippets });
+    const data = await memoize(
+      `${SNIPPETS_LIST_PREFIX}${full ? "full" : "lite"}`,
+      () => buildListing(full)
+    );
+    return NextResponse.json(data, { headers: CACHE_HEADERS });
   } catch {
-    return NextResponse.json({ folders: [], snippets: [] });
+    return NextResponse.json({ folders: [], snippets: [] }, { headers: CACHE_HEADERS });
   }
 }
 

@@ -7,7 +7,6 @@ import { useTabContext } from "./TabContext";
 import Icon from "./Icon";
 import type {
   Variables,
-  ConditionsConfig,
   GlossaryTerm,
   ContentStyle,
   TocArticle,
@@ -100,9 +99,17 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
     if (loadedRef.current) return;
     loadedRef.current = true;
 
-    async function load() {
+    // Fire requests in parallel; render editor as soon as article body
+    // resolves, then stream metadata in as it arrives. The 5 toolbar-
+    // metadata reads are bundled into /api/editor-meta to dodge the
+    // browser 6-connection limit and per-route dev-compile cost.
+    const articlePromise = fetch(`/api/article?path=${encodeURIComponent(filePath)}`);
+    const tocPromise = isSnippet ? null : fetch("/api/toc").catch(() => null);
+    const metaPromise = fetch("/api/editor-meta").catch(() => null);
+
+    (async () => {
       try {
-        const articleRes = await fetch(`/api/article?path=${encodeURIComponent(filePath)}`);
+        const articleRes = await articlePromise;
         if (!articleRes.ok) throw new Error("Failed to load article");
         const articleData = await articleRes.json();
 
@@ -133,42 +140,35 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
             const m = raw.match(/<!--\s*name:\s*(.+?)\s*-->/);
             if (m) setSnippetTitle(m[1]);
           }
-        } else {
-          const tocRes = await fetch("/api/toc");
-          if (tocRes.ok) {
-            const toc: Toc = await tocRes.json();
-            const found = findArticleInToc(toc, filePath);
-            if (found) setArticleMeta(found);
-          }
-        }
-
-        const [varsRes, condsRes, glossaryRes, stylesRes, snippetsRes] = await Promise.all([
-          fetch("/api/variables").catch(() => null),
-          fetch("/api/content?path=conditions.json").catch(() => null),
-          fetch("/api/glossary").catch(() => null),
-          fetch("/api/content?path=styles.json").catch(() => null),
-          fetch("/api/snippets").catch(() => null),
-        ]);
-
-        if (varsRes?.ok) setVariables(await varsRes.json());
-        if (condsRes?.ok) {
-          try { const d = await condsRes.json(); const c: ConditionsConfig = d.content ? JSON.parse(d.content) : d; setConditionTags(c.tags || []); } catch { /* */ }
-        }
-        if (glossaryRes?.ok) { const g = await glossaryRes.json(); setGlossaryTerms(g.terms || []); }
-        if (stylesRes?.ok) {
-          try { const d = await stylesRes.json(); const s = d.content ? JSON.parse(d.content) : d; setStyles(Array.isArray(s) ? s : []); } catch { /* */ }
-        }
-        if (snippetsRes?.ok) {
-          try { const snips = await snippetsRes.json(); const list = snips.snippets || snips; setSnippetNames(list.map((s: { name: string }) => s.name)); } catch { /* */ }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
         setLoading(false);
       }
-    }
-    load();
-  }, [filePath]);
+    })();
+
+    tocPromise?.then(async (res) => {
+      if (!res?.ok) return;
+      try {
+        const toc: Toc = await res.json();
+        const found = findArticleInToc(toc, filePath);
+        if (found) setArticleMeta(found);
+      } catch { /* */ }
+    });
+
+    metaPromise.then(async (res) => {
+      if (!res?.ok) return;
+      try {
+        const meta = await res.json();
+        setVariables(meta.variables || {});
+        setConditionTags(meta.conditions?.tags || []);
+        setGlossaryTerms(meta.glossary?.terms || []);
+        setStyles(Array.isArray(meta.styles) ? meta.styles : []);
+        setSnippetNames(meta.snippetNames || []);
+      } catch { /* */ }
+    });
+  }, [filePath, isSnippet]);
 
   function findArticleInToc(toc: Toc, file: string): TocArticle | null {
     for (const cat of toc.categories) {

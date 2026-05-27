@@ -80,7 +80,7 @@ export default function SidebarTree() {
       .then((data: Toc) => setToc(data))
       .catch(console.error);
 
-    fetch("/api/snippets")
+    fetch("/api/snippets?full=1")
       .then((r) => r.json())
       .then((data) => setSnippetsData(data))
       .catch(() => {});
@@ -166,7 +166,7 @@ export default function SidebarTree() {
       setExpanded((prev) => new Set([...prev, `${prefix}:${folderPath}`]));
       // Reload data
       if (creatingAt.type === "snippet-folder") {
-        fetch("/api/snippets").then((r) => r.json()).then(setSnippetsData).catch(() => {});
+        fetch("/api/snippets?full=1").then((r) => r.json()).then(setSnippetsData).catch(() => {});
       } else {
         fetch("/api/images").then((r) => r.json()).then(setImagesData).catch(() => {});
       }

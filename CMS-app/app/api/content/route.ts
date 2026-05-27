@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, putFile, deleteFile } from "@/lib/storage";
+import { getFile, getCachedFile, putFile, deleteFile } from "@/lib/storage";
+
+// Small metadata files the editor reads on every article open. Caching
+// these via getCachedFile means hundreds of editor opens share one read;
+// invalidation happens automatically in storage.putFile/deleteFile.
+const CACHEABLE_PATHS = new Set([
+  "conditions.json",
+  "styles.json",
+  "dictionary.json",
+  "editor-styles.css",
+]);
+
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+};
 
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.searchParams.get("path");
@@ -31,8 +45,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const file = await getFile(`content/${path}`, ref);
-    return NextResponse.json(file);
+    const useCached = !ref && CACHEABLE_PATHS.has(path);
+    const file = useCached
+      ? await getCachedFile(`content/${path}`)
+      : await getFile(`content/${path}`, ref);
+    return NextResponse.json(file, useCached ? { headers: CACHE_HEADERS } : undefined);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to read file";
     return NextResponse.json({ error: message }, { status: 404 });

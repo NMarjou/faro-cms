@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, putFile } from "@/lib/storage";
+import { getCachedFile, putFile } from "@/lib/storage";
 import type { Glossary } from "@/lib/types";
+
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+};
 
 async function loadGlossary(): Promise<Glossary> {
   try {
-    const file = await getFile("content/glossary.json");
+    const file = await getCachedFile("content/glossary.json");
     return JSON.parse(file.content);
   } catch {
     return { terms: [] };
@@ -13,7 +17,7 @@ async function loadGlossary(): Promise<Glossary> {
 
 export async function GET() {
   const glossary = await loadGlossary();
-  return NextResponse.json(glossary);
+  return NextResponse.json(glossary, { headers: CACHE_HEADERS });
 }
 
 export async function PUT(request: NextRequest) {
