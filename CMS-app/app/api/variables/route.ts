@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, putFile } from "@/lib/storage";
+import { getCachedFile, putFile } from "@/lib/storage";
 import type { Variables, VariableSet, VariableSetsData } from "@/lib/types";
+
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+};
 
 /** Read raw variables.json and normalize to sets format */
 async function loadSets(ref?: string): Promise<VariableSetsData> {
   try {
-    const file = await getFile("content/variables.json", ref);
+    const file = await getCachedFile("content/variables.json", ref);
     const data = JSON.parse(file.content);
 
     // Already in sets format
@@ -48,11 +52,11 @@ export async function GET(request: NextRequest) {
   const data = await loadSets(ref);
 
   if (format === "sets") {
-    return NextResponse.json(data);
+    return NextResponse.json(data, { headers: CACHE_HEADERS });
   }
 
   // Default: return flat merged object (backward compatible)
-  return NextResponse.json(mergeFlat(data));
+  return NextResponse.json(mergeFlat(data), { headers: CACHE_HEADERS });
 }
 
 export async function PUT(request: NextRequest) {

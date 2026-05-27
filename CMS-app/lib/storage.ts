@@ -5,8 +5,14 @@
 import * as github from "./github";
 import * as localFs from "./local-fs";
 import type { GitHubFile } from "./types";
+import { memoize, invalidate, invalidatePrefix } from "./cache";
 
 const isLocal = !process.env.GITHUB_TOKEN;
+
+const FILE_KEY = (path: string) => `file:${path}`;
+const FILE_TTL_MS = 60_000;
+
+export const SNIPPETS_LIST_PREFIX = "snippets:list:";
 
 export async function getFile(
   path: string,
@@ -16,6 +22,25 @@ export async function getFile(
   return github.getFile(path, ref);
 }
 
+/**
+ * Cached read for slowly-changing files. Bypasses cache when a specific
+ * `ref` is requested. Writes via `putFile`/`deleteFile` invalidate.
+ */
+export async function getCachedFile(
+  path: string,
+  ref?: string
+): Promise<GitHubFile> {
+  if (ref) return getFile(path, ref);
+  return memoize(FILE_KEY(path), () => getFile(path), FILE_TTL_MS);
+}
+
+export function invalidateFileCache(path: string): void {
+  invalidate(FILE_KEY(path));
+  if (path.startsWith("content/snippets/")) {
+    invalidatePrefix(SNIPPETS_LIST_PREFIX);
+  }
+}
+
 export async function putFile(
   path: string,
   content: string,
@@ -23,6 +48,7 @@ export async function putFile(
   branch?: string,
   sha?: string
 ): Promise<{ sha: string; commitSha: string }> {
+  invalidateFileCache(path);
   if (isLocal) return localFs.putFile(path, content);
   return github.putFile(path, content, message, branch, sha);
 }
@@ -32,6 +58,7 @@ export async function deleteFile(
   message: string,
   branch?: string
 ): Promise<void> {
+  invalidateFileCache(path);
   if (isLocal) return localFs.deleteFile(path);
   return github.deleteFile(path, message, branch);
 }

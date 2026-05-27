@@ -543,6 +543,10 @@ export default function Editor({
   }, [filePath, currentUser?.email, hasMarkedReviewDone, onReviewDoneChanged]);
 
   const editor = useEditor({
+    // Defer initial render to client mount to skip TipTap's SSR-safety
+    // dance under React 18 strict mode (silences the "SSR detected" warning
+    // and avoids a wasted re-render).
+    immediatelyRender: false,
     // Contributors review articles, they don't write them. Read-only blocks
     // typing/pasting/deleting but keeps selection (so they can highlight a
     // span and comment on it). Phase 3's "Suggest changes" mode will lift

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, putFile } from "@/lib/storage";
+import { getCachedFile, putFile } from "@/lib/storage";
+
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+};
 
 export async function GET(request: NextRequest) {
   const ref = request.nextUrl.searchParams.get("ref") || undefined;
 
   try {
-    const file = await getFile("content/toc.json", ref);
-    return NextResponse.json(JSON.parse(file.content));
+    const file = await getCachedFile("content/toc.json", ref);
+    return NextResponse.json(JSON.parse(file.content), { headers: CACHE_HEADERS });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to read TOC";
     return NextResponse.json({ error: message }, { status: 500 });
