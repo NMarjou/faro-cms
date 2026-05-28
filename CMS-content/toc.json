@@ -40,7 +40,11 @@
             {
               "title": "This is a test article",
               "file": "help/workbench/this-is-a-test-article.mdx",
-              "slug": "this-is-a-test-article"
+              "slug": "this-is-a-test-article",
+              "assignedTo": [
+                "test.contributor@example.com"
+              ],
+              "assignedBy": "nolwenn.marjou@beqom.com"
             },
             {
               "title": "Data Management Basics",
