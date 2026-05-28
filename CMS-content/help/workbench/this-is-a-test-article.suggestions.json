@@ -1,0 +1,15 @@
+{
+  "suggestions": [
+    {
+      "id": "sug_mppi9j2a_v57k7b",
+      "author": "test.contributor@example.com",
+      "authorName": "Test Contributor",
+      "createdAt": "2026-05-28T13:05:00.610Z",
+      "originalText": "Start writing here...",
+      "suggestedText": "Bloop bloop",
+      "status": "pending",
+      "occurrenceIndex": 0,
+      "note": "Why not?"
+    }
+  ]
+}
