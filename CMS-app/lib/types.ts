@@ -13,6 +13,17 @@ export interface TocArticle {
   assignedTo?: string[]; // emails of contributors the tech writer has shared this article with
   reviewsDone?: string[]; // emails of reviewers who have marked their review complete
   assignedBy?: string; // email of the tech writer who initiated the share (used for review-done notifications)
+  /**
+   * Tech-writer's article-level sign-off. Independent of `reviewsDone[]`
+   * (which is per-contributor). Set true when the tech writer marks the
+   * review complete; reset to undefined when reopened, when the article
+   * is sent for review again, or when the article body is saved
+   * (changed-since-signoff invalidates the approval). Publish is gated
+   * on this when assignedTo is non-empty.
+   */
+  reviewComplete?: boolean;
+  reviewCompletedBy?: string; // tech writer email who signed off
+  reviewCompletedAt?: string; // ISO timestamp
 }
 
 export interface TocSection {

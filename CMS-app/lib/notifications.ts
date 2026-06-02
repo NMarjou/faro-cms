@@ -308,3 +308,57 @@ export async function notifyReviewMarkedDone(n: ReviewMarkedDone): Promise<void>
     }),
   ]);
 }
+
+interface ReviewSignedOff {
+  /** Contributors to ping — typically the article's `assignedTo` list. */
+  recipientEmails: string[];
+  /** Map of email → display name so the email greeting can be personal. */
+  recipientNames?: Record<string, string | undefined>;
+  /** The tech writer who signed off. */
+  techWriterName: string;
+  techWriterEmail?: string;
+  articleTitle: string;
+  articleFile: string;
+  baseUrl?: string;
+}
+
+/**
+ * Fired when a tech writer flips the article-level `reviewComplete` flag.
+ * Pings each contributor who was assigned to the review so they know the
+ * round closed and their suggestions won't be actioned further.
+ */
+export async function notifyReviewSignedOff(
+  n: ReviewSignedOff
+): Promise<void> {
+  if (n.recipientEmails.length === 0) return;
+  const link = n.baseUrl
+    ? `${n.baseUrl.replace(/\/$/, "")}/editor/${encodeURIComponent(n.articleFile)}`
+    : null;
+  const subject = `Review signed off: ${n.articleTitle}`;
+
+  await Promise.all([
+    ...n.recipientEmails.map((to) => {
+      const firstName = displayName(to, n.recipientNames?.[to.toLowerCase()]).split(" ")[0];
+      const body =
+        `${n.techWriterName} has marked the review of "${n.articleTitle}" as done. ` +
+        `The review round is now closed — thanks for your input.`;
+      return sendEmail({
+        to,
+        subject,
+        text:
+          `Hello ${firstName},\n\n${body}` +
+          (link ? `\n\nOpen the article: ${link}` : ""),
+        html:
+          `<p>Hello ${firstName},</p><p>${body}</p>` +
+          (link
+            ? `<p><a href="${link}">Open <em>${n.articleTitle}</em></a></p>`
+            : ""),
+      });
+    }),
+    postSlack({
+      text:
+        `:lock: *${n.techWriterName}* signed off the review of *${n.articleTitle}*.` +
+        (link ? ` <${link}|Open article>` : ""),
+    }),
+  ]);
+}

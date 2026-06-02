@@ -12,7 +12,7 @@ const DEFAULT_COLORS = [
 ];
 
 export default function PlatformSettingsPage() {
-  const { role, loaded } = useCurrentUser();
+  const { role, loaded: userLoaded } = useCurrentUser();
   const [tags, setTags] = useState<string[]>([]);
   const [colors, setColors] = useState<Record<string, string>>({});
   const [newTag, setNewTag] = useState("");
@@ -205,7 +205,7 @@ export default function PlatformSettingsPage() {
 
   const cssDirty = css !== cssOriginal;
 
-  if (loaded && role === "contributor") {
+  if (userLoaded && role === "contributor") {
     return <TechWriterBlocked title="Platform Settings" />;
   }
 

@@ -62,6 +62,13 @@ interface ToolbarProps {
   /** Reason the button is unavailable, used as the disabled tooltip. */
   markDoneBlockedReason?: string | null;
   onMarkReviewDone?: () => void;
+  /**
+   * True once the tech writer has signed the article off (article-level
+   * `reviewComplete`). Hides the contributor's Suggest Changes affordance
+   * — proposing new edits after sign-off would only land in a closed
+   * round. Comments remain available as a record of discussion.
+   */
+  reviewLocked?: boolean;
 }
 
 // Editor ribbon icons — Phosphor names per the Faro Design System mapping.
@@ -223,6 +230,7 @@ export default function Toolbar({
   reviewDone = false,
   markDoneBlockedReason = null,
   onMarkReviewDone,
+  reviewLocked = false,
 }: ToolbarProps) {
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [showLinkPicker, setShowLinkPicker] = useState(false);
@@ -257,19 +265,25 @@ export default function Toolbar({
                   <span className="ribbon-btn-badge">{commentCount}</span>
                 )}
               </button>
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onSuggestChanges?.()}
-                title="Submit your proposed edits to the tech writer for review"
-                className={`ribbon-btn${showSuggestions ? " active" : ""}`}
-                disabled={!onSuggestChanges}
-                style={{ position: "relative" }}
-              >
-                <Icon name="git-pull-request" size={15} title="Suggest changes" />
-                {pendingSuggestionsCount > 0 && (
-                  <span className="ribbon-btn-badge">{pendingSuggestionsCount}</span>
-                )}
-              </button>
+              {/* Suggest Changes hidden once the tech writer has signed
+                  off — the review round is closed, new suggestions
+                  wouldn't be actioned. Comments stay so the discussion
+                  record is preserved. */}
+              {!reviewLocked && (
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onSuggestChanges?.()}
+                  title="Submit your proposed edits to the tech writer for review"
+                  className={`ribbon-btn${showSuggestions ? " active" : ""}`}
+                  disabled={!onSuggestChanges}
+                  style={{ position: "relative" }}
+                >
+                  <Icon name="git-pull-request" size={15} title="Suggest changes" />
+                  {pendingSuggestionsCount > 0 && (
+                    <span className="ribbon-btn-badge">{pendingSuggestionsCount}</span>
+                  )}
+                </button>
+              )}
             </div>
             {/* Mark as done — only shown to the assigned contributor.
                 Pushed to the right of the ribbon row so it reads as the
@@ -288,11 +302,18 @@ export default function Toolbar({
                     Review done
                   </button>
                 ) : (
+                  // Button stays clickable even when blocked — the click is
+                  // the trigger that surfaces the warning banner on the
+                  // parent page. Visually muted (opacity + cursor) so it's
+                  // still obviously a "wait, can't do this yet" state.
                   <button
                     onClick={() => onMarkReviewDone?.()}
-                    disabled={!!markDoneBlockedReason || !onMarkReviewDone}
                     title={markDoneBlockedReason || "Finish the review and send the article back to the tech writer"}
                     className="btn btn-sm btn-gold btn-inline-icon"
+                    style={{
+                      opacity: markDoneBlockedReason ? 0.5 : 1,
+                      cursor: markDoneBlockedReason ? "not-allowed" : "pointer",
+                    }}
                   >
                     <Icon name="check" weight="bold" size={14} />
                     Mark as done

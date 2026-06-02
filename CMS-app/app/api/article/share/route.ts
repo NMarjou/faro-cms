@@ -89,6 +89,15 @@ export async function POST(request: NextRequest) {
       delete article.assignedTo;
       delete article.assignedBy;
     }
+    // A fresh share starts a new review round. Any previous tech-writer
+    // sign-off is no longer authoritative — clear it so the article is
+    // back to "in review" and publish is gated again until a new sign-off.
+    delete article.reviewComplete;
+    delete article.reviewCompletedBy;
+    delete article.reviewCompletedAt;
+    // Per-contributor "review done" rows from the previous round are
+    // also stale; clear so the new reviewers start from a clean slate.
+    delete article.reviewsDone;
 
     const writeMessage =
       emails.length > 0
