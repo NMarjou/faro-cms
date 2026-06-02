@@ -276,7 +276,11 @@ export default function EditorPage() {
         throw new Error(data.error || "Save failed");
       }
 
-      // Update lastModified in TOC
+      // Update lastModified in TOC. Saving body content after a sign-off
+      // also clears the sign-off — the article has effectively changed
+      // since the tech writer approved it, so it must be re-signed before
+      // publish. Reset the local articleMeta to match.
+      let clearedSignoff = false;
       if (articleMeta) {
         const tocRes = await fetch("/api/toc");
         if (tocRes.ok) {
@@ -284,6 +288,12 @@ export default function EditorPage() {
           const art = findArticleInToc(toc, filePath);
           if (art) {
             art.lastModified = new Date().toISOString().split("T")[0];
+            if (art.reviewComplete) {
+              delete art.reviewComplete;
+              delete art.reviewCompletedBy;
+              delete art.reviewCompletedAt;
+              clearedSignoff = true;
+            }
             await fetch("/api/toc", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
@@ -291,6 +301,19 @@ export default function EditorPage() {
             });
           }
         }
+      }
+
+      if (clearedSignoff) {
+        setArticleMeta((p) =>
+          p
+            ? {
+                ...p,
+                reviewComplete: undefined,
+                reviewCompletedBy: undefined,
+                reviewCompletedAt: undefined,
+              }
+            : p
+        );
       }
 
       setIsDirty(false);
@@ -666,17 +689,25 @@ export default function EditorPage() {
           >
             <Icon name="floppy-disk" size={16} />
           </button>
-          {!isSnippet && articleMeta && !isContributor && (
-            <button
-              onClick={() => setShowReviewDrawer(true)}
-              className="btn"
-              title="Share this article with a contributor for review"
-            >
-              Send for Review{articleMeta.assignedTo && articleMeta.assignedTo.length > 0
-                ? ` (${articleMeta.assignedTo.length})`
-                : ""}
-            </button>
-          )}
+          {/* Hide Send for Review once the article is signed off AND there
+              are no unsaved edits — a clean sign-off state means no new
+              changes need contributor input. The moment the tech writer
+              starts typing (isDirty=true) the button reappears so they
+              can request a new review round if the changes warrant it. */}
+          {!isSnippet &&
+            articleMeta &&
+            !isContributor &&
+            !(articleMeta.reviewComplete && !isDirty) && (
+              <button
+                onClick={() => setShowReviewDrawer(true)}
+                className="btn"
+                title="Share this article with a contributor for review"
+              >
+                Send for Review{articleMeta.assignedTo && articleMeta.assignedTo.length > 0
+                  ? ` (${articleMeta.assignedTo.length})`
+                  : ""}
+              </button>
+            )}
           {/* Tech-writer's article-level sign-off. Only visible when the
               article was actually sent for review. Mirrors the contributor's
               "Mark as done" visual language with the same gold/check
