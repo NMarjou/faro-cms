@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { QAIssue } from "@/lib/types";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 interface QAResult {
   issues: QAIssue[];
@@ -30,6 +32,7 @@ function parseSpellingWords(detail: string): { word: string; count: number; sugg
 }
 
 export default function QAPage() {
+  const { role, loaded } = useCurrentUser();
   const [data, setData] = useState<QAResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
@@ -103,6 +106,10 @@ export default function QAPage() {
   };
 
   const spellingCount = data?.issues.filter((i) => i.type === "spelling").length || 0;
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="QA Dashboard" />;
+  }
 
   return (
     <>

@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 export default function NewArticlePage() {
   const router = useRouter();
+  const { role, loaded } = useCurrentUser();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
@@ -74,6 +77,10 @@ export default function NewArticlePage() {
       setSaving(false);
     }
   };
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="New Article" />;
+  }
 
   return (
     <>
