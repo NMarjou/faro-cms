@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import type { SearchEntry } from "@/lib/types";
+import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -82,9 +83,12 @@ export default function SearchPage() {
                   color: "inherit",
                 }}
               >
-                <h3 style={{ fontSize: 15, marginBottom: 4 }}>
-                  {result.title}
-                </h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <h3 style={{ fontSize: 15, margin: 0 }}>
+                    {result.title}
+                  </h3>
+                  <ArticleStatusBadge article={result} />
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <span className="badge badge-accent">{result.category}</span>
                   <span className="badge">{result.section}</span>

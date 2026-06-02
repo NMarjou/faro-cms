@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Toc, TocCategory, TocArticle } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 
 export default function ArticlesPage() {
   const { role } = useCurrentUser();
@@ -197,6 +198,7 @@ export default function ArticlesPage() {
                                       }}
                                     >
                                       <span style={{ flex: 1 }}>{article.title}</span>
+                                      <ArticleStatusBadge article={article} />
                                       {reviewDone && (
                                         <span
                                           title={`Review done by: ${article.reviewsDone!.join(", ")}`}

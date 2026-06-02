@@ -197,6 +197,9 @@ export async function buildSearchEntries(
             section: section.slug,
             bodyText: stripMdx(full.content),
             filePath: article.file,
+            assignedTo: article.assignedTo,
+            reviewComplete: article.reviewComplete,
+            published: article.published,
           });
         } catch {
           // Skip articles that can't be loaded

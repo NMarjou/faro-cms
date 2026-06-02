@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Toc, TocArticle } from "@/lib/types";
 import Icon from "@/components/Icon";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 
 interface DashboardStats {
   articles: number;
@@ -17,7 +18,11 @@ interface RecentArticle {
   title: string;
   file: string;
   lastModified?: string;
+  // Carried through so the dashboard can render a status badge without
+  // re-fetching. Keeps `RecentArticle` thin while staying status-aware.
   assignedTo?: string[];
+  reviewComplete?: boolean;
+  published?: boolean;
 }
 
 function collectAllArticles(toc: Toc): TocArticle[] {
@@ -75,7 +80,14 @@ export default function DashboardPage() {
             withDates.push(...remaining);
           }
           for (const a of withDates.slice(0, 5)) {
-            recentArticles.push({ title: a.title, file: a.file, lastModified: a.lastModified, assignedTo: a.assignedTo });
+            recentArticles.push({
+              title: a.title,
+              file: a.file,
+              lastModified: a.lastModified,
+              assignedTo: a.assignedTo,
+              reviewComplete: a.reviewComplete,
+              published: a.published,
+            });
           }
 
           // Articles where the current contributor appears in `assignedTo`.
@@ -86,7 +98,14 @@ export default function DashboardPage() {
               .filter((a) => a.assignedTo?.some((e) => e.toLowerCase() === me))
               .sort((a, b) => (b.lastModified || "").localeCompare(a.lastModified || ""));
             for (const a of myArticles) {
-              assignedArticles.push({ title: a.title, file: a.file, lastModified: a.lastModified, assignedTo: a.assignedTo });
+              assignedArticles.push({
+                title: a.title,
+                file: a.file,
+                lastModified: a.lastModified,
+                assignedTo: a.assignedTo,
+                reviewComplete: a.reviewComplete,
+                published: a.published,
+              });
             }
           }
         }
@@ -184,7 +203,7 @@ export default function DashboardPage() {
                         updated {article.lastModified || "—"}
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, color: "var(--accent-glow)", fontWeight: 500 }}>Review pending</span>
+                    <ArticleStatusBadge article={article} />
                   </Link>
                 ))}
               </div>
@@ -217,9 +236,12 @@ export default function DashboardPage() {
                         }}
                       >
                         <div style={{ fontSize: 14, fontWeight: 500 }}>{article.title}</div>
-                        <span style={{ fontSize: 11, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>
-                          {article.lastModified || "—"}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <ArticleStatusBadge article={article} />
+                          <span style={{ fontSize: 11, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>
+                            {article.lastModified || "—"}
+                          </span>
+                        </div>
                       </Link>
                     ))}
                 </div>
@@ -349,6 +371,7 @@ export default function DashboardPage() {
                           updated {article.lastModified || "—"}
                         </div>
                       </div>
+                      <ArticleStatusBadge article={article} />
                     </Link>
                   ))}
                 </div>

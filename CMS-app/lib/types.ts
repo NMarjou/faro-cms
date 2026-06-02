@@ -24,6 +24,15 @@ export interface TocArticle {
   reviewComplete?: boolean;
   reviewCompletedBy?: string; // tech writer email who signed off
   reviewCompletedAt?: string; // ISO timestamp
+  /**
+   * Foundation for the Published status. Stays undefined until we wire up
+   * a post-merge hook on the publish PR — once that exists it'll flip true
+   * and the status helper will surface "Published" on the surfaces that
+   * use it. Kept on the article entry (not the TOC root) so each article's
+   * publish state can drift independently.
+   */
+  published?: boolean;
+  publishedAt?: string; // ISO timestamp of the merge that published it
 }
 
 export interface TocSection {
@@ -174,6 +183,12 @@ export interface SearchEntry {
   section: string;
   bodyText: string; // stripped plain text for indexing
   filePath: string;
+  // Status-derivable fields copied from the TOC entry so search results
+  // can render an ArticleStatusBadge without a second fetch. The badge
+  // helper derives status purely from these; no other fields needed.
+  assignedTo?: string[];
+  reviewComplete?: boolean;
+  published?: boolean;
 }
 
 // ── Glossary ──

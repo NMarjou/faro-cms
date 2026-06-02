@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import Icon from "@/components/Icon";
+import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import type {
   Variables,
@@ -638,6 +639,7 @@ export default function EditorPage() {
           <button onClick={() => router.push(isSnippet ? "/snippets" : "/articles")} className="btn btn-sm">Back</button>
           <h1 style={{ fontSize: 16 }}>{title}</h1>
           <span className="badge">{isSnippet ? "SNIPPET" : format.toUpperCase()}</span>
+          {!isSnippet && articleMeta && <ArticleStatusBadge article={articleMeta} />}
           {isDirty ? (
             <span className="badge" style={{ background: "var(--warning-light)", color: "var(--warning)" }}>Unsaved</span>
           ) : lastAutoSaved ? (
