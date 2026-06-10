@@ -4,7 +4,9 @@ import React, { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
 
-const SortableList = dynamic(() => import("@/components/SortableList"), { ssr: false });
+const SortableList = dynamic(() => import("@/components/SortableList"), {
+  ssr: false,
+}) as typeof import("@/components/SortableList").default;
 
 interface ImageInfo {
   name: string;

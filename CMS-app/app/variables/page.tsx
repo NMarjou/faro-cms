@@ -5,7 +5,9 @@ import dynamic from "next/dynamic";
 import type { VariableSet, VariableSetsData } from "@/lib/types";
 import { DragHandle } from "@/components/SortableList";
 
-const SortableList = dynamic(() => import("@/components/SortableList"), { ssr: false });
+const SortableList = dynamic(() => import("@/components/SortableList"), {
+  ssr: false,
+}) as typeof import("@/components/SortableList").default;
 
 export default function VariablesPage() {
   const [data, setData] = useState<VariableSetsData>({ sets: [] });
