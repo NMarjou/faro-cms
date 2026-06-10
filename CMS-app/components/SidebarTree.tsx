@@ -9,6 +9,7 @@ import { useTheme } from "./ThemeProvider";
 import FaroLogo from "./FaroLogo";
 import Icon from "./Icon";
 import { useCurrentUser } from "./CurrentUserProvider";
+import { isTechWriter } from "@/lib/permissions";
 
 type CreatingAt =
   | null
@@ -21,16 +22,19 @@ export default function SidebarTree() {
   const pathname = usePathname();
   const router = useRouter();
   const { role } = useCurrentUser();
-  // Treat unknown / unloaded as tech-writer so the chrome doesn't flicker
-  // empty during the brief load. Contributors render the limited shell.
-  const isContributor = role === "contributor";
+  // Tech-writer-only tooling (structure editing, snippets, images, variables,
+  // publish, import, QA, review queue, platform settings). Authors and
+  // contributors both see the limited shell — authors create articles from the
+  // Articles page, not the nav. Unknown/unloaded role → not a tech writer, so
+  // the limited shell renders during the brief load rather than flashing tools.
+  const techWriter = isTechWriter(role);
 
   // Review-queue badge — tech writers see a count of pending suggestions
   // across all articles. Cheap GET; refreshed on identity change and via
   // the same `cms-identity-changed` custom event other surfaces listen for.
   const [reviewPending, setReviewPending] = useState(0);
   useEffect(() => {
-    if (isContributor) return;
+    if (!techWriter) return;
     let cancelled = false;
     const fetchCount = () => {
       fetch("/api/suggestions")
@@ -52,7 +56,7 @@ export default function SidebarTree() {
       window.removeEventListener("cms-identity-changed", handler);
       window.removeEventListener("focus", handler);
     };
-  }, [isContributor]);
+  }, [techWriter]);
   const [toc, setToc] = useState<Toc | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [viewingImage, setViewingImage] = useState<{ name: string; file: string } | null>(null);
@@ -305,7 +309,7 @@ export default function SidebarTree() {
             <span className="tree-label">{category.name}</span>
             <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
           </div>
-          {!isContributor && (
+          {techWriter && (
             <button
               className="tree-add-btn tree-add-btn-hover"
               title={`New section in ${category.name}`}
@@ -322,7 +326,7 @@ export default function SidebarTree() {
         {isOpen && (
           <div className="tree-children">
             {category.sections.map((s) => renderSection(s, category.slug))}
-            {!isContributor && creatingAt?.type === "section" && creatingAt.categorySlug === category.slug && (
+            {techWriter && creatingAt?.type === "section" && creatingAt.categorySlug === category.slug && (
               <InlineFolderInput />
             )}
           </div>
@@ -479,7 +483,7 @@ export default function SidebarTree() {
         <nav style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, marginTop: 8, flex: 1, overflow: "hidden auto", width: "100%" }}>
           {navItem("/", "squares-four", "Dashboard", pathname === "/")}
           {navItem("/articles", "file-text", "Articles", articlesActive)}
-          {!isContributor && (
+          {techWriter && (
             <>
               {navItem("/snippets", "scissors", "Snippets", pathname === "/snippets")}
               {navItem("/images", "image-square", "Images", pathname === "/images")}
@@ -489,7 +493,7 @@ export default function SidebarTree() {
           )}
           {navItem("/glossary", "book-open", "Glossary", pathname === "/glossary")}
           {navItem("/search", "magnifying-glass", "Search", pathname === "/search")}
-          {!isContributor && (
+          {techWriter && (
             <>
               {navItem("/publish", "cloud-arrow-up", "Publish", pathname === "/publish")}
               {navItem("/import", "download-simple", "Import", pathname === "/import")}
@@ -499,7 +503,7 @@ export default function SidebarTree() {
             </>
           )}
           {navItem("/settings", "user", "User Settings", pathname === "/settings")}
-          {!isContributor && navItem("/settings/platform", "gear", "Platform Settings", pathname === "/settings/platform")}
+          {techWriter && navItem("/settings/platform", "gear", "Platform Settings", pathname === "/settings/platform")}
         </nav>
         <button
           onClick={() => setCollapsed(false)}
@@ -517,7 +521,7 @@ export default function SidebarTree() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <FaroLogo size={36} />
-        {!isContributor && (
+        {techWriter && (
         <div ref={createMenuRef} style={{ position: "relative", marginLeft: "auto" }}>
           <button
             onClick={() => setShowCreateMenu((p) => !p)}
@@ -570,7 +574,7 @@ export default function SidebarTree() {
               <Icon name="file-text" />
               Articles
             </Link>
-            {!isContributor && (
+            {techWriter && (
               <button
                 className="tree-add-btn tree-add-btn-hover"
                 title="New category"
@@ -592,7 +596,7 @@ export default function SidebarTree() {
               {toc ? (
                 <>
                   {toc.categories.map((cat) => renderCategory(cat))}
-                  {!isContributor && creatingAt?.type === "category" && <InlineFolderInput />}
+                  {techWriter && creatingAt?.type === "category" && <InlineFolderInput />}
                   {toc.articles && toc.articles.length > 0 && (
                     <div className="tree-node">
                       <div className="tree-section-label" style={{ marginTop: 4, fontSize: 10 }}>
@@ -614,7 +618,7 @@ export default function SidebarTree() {
         </div>
 
         {/* Snippets / Images / Variables / TOCs — tech writer only */}
-        {!isContributor && (
+        {techWriter && (
         <>
 
         {/* Snippets — expandable tree */}
@@ -767,7 +771,7 @@ export default function SidebarTree() {
           Search
         </Link>
 
-        {!isContributor && (
+        {techWriter && (
         <>
         <Link href="/publish" className={`tree-nav-link${pathname === "/publish" ? " active" : ""}`}>
           <Icon name="cloud-arrow-up" />
@@ -804,7 +808,7 @@ export default function SidebarTree() {
           User Settings
         </Link>
 
-        {!isContributor && (
+        {techWriter && (
         <Link href="/settings/platform" className={`tree-nav-link${pathname === "/settings/platform" ? " active" : ""}`}>
           <Icon name="gear" />
           Platform Settings

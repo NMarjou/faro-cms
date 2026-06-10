@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { canCreateArticles } from "@/lib/permissions";
 
 export default function NewArticlePage() {
   const router = useRouter();
+  const { user, role, loaded: userLoaded } = useCurrentUser();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
@@ -59,6 +62,8 @@ export default function NewArticlePage() {
           format: "html",
           createdDate: new Date().toISOString().split("T")[0],
           lastModified: new Date().toISOString().split("T")[0],
+          // Record the creator as the owner — gates who may edit it later.
+          ...(user?.email ? { author: user.email } : {}),
         });
         await fetch("/api/toc", {
           method: "PUT",
@@ -74,6 +79,23 @@ export default function NewArticlePage() {
       setSaving(false);
     }
   };
+
+  // Contributors can't create articles. Gate the page once the role resolves
+  // so a direct navigation to /articles/new doesn't expose the form.
+  if (userLoaded && !canCreateArticles(role)) {
+    return (
+      <>
+        <header className="main-header">
+          <h1>New Article</h1>
+        </header>
+        <div className="main-body">
+          <div className="card" style={{ maxWidth: 500, color: "var(--fg-muted)" }}>
+            Creating articles is available to tech writers and authors only.
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

@@ -9,10 +9,14 @@ export interface TocArticle {
   conditions?: string[];
   createdDate?: string;
   lastModified?: string;
-  author?: string;
+  author?: string; // owner — email of the user who created the article (gates edit rights for the author role)
   assignedTo?: string[]; // emails of contributors the tech writer has shared this article with
   reviewsDone?: string[]; // emails of reviewers who have marked their review complete
   assignedBy?: string; // email of the tech writer who initiated the share (used for review-done notifications)
+  // ── Publish sign-off (author role) ──
+  approvalStatus?: "submitted"; // present only while an author's article awaits tech-writer sign-off
+  submittedBy?: string; // email of the author who submitted it for approval
+  submittedAt?: string; // ISO date the article was submitted
 }
 
 export interface TocSection {
@@ -85,7 +89,7 @@ export interface Snippet {
 
 // ── Users & Roles ──
 
-export type UserRole = "tech-writer" | "contributor";
+export type UserRole = "tech-writer" | "author" | "contributor";
 
 export interface User {
   email: string;

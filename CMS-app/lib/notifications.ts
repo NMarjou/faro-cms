@@ -308,3 +308,52 @@ export async function notifyReviewMarkedDone(n: ReviewMarkedDone): Promise<void>
     }),
   ]);
 }
+
+interface ArticleSubmittedForApproval {
+  /** Tech writer(s) to notify — they sign off by publishing. */
+  recipientEmails: string[];
+  /** The author who submitted the article. */
+  submitterEmail: string;
+  submitterName?: string;
+  articleTitle: string;
+  articleFile: string;
+  baseUrl?: string;
+}
+
+/**
+ * Fired when an author submits one of their own articles for tech-writer
+ * sign-off. Lands one email per tech writer + a single Slack post. Publishing
+ * the article is the sign-off — there's no separate approve action.
+ */
+export async function notifyArticleSubmittedForApproval(
+  a: ArticleSubmittedForApproval
+): Promise<void> {
+  if (a.recipientEmails.length === 0) return;
+  const submitterLabel = displayName(a.submitterEmail, a.submitterName);
+  const link = a.baseUrl
+    ? `${a.baseUrl.replace(/\/$/, "")}/editor/${encodeURIComponent(a.articleFile)}`
+    : null;
+
+  const subject = `Approval requested: ${a.articleTitle}`;
+  const body = `${submitterLabel} submitted "${a.articleTitle}" for your sign-off in Faro CMS. Review it and publish to approve.`;
+
+  await Promise.all([
+    ...a.recipientEmails.map((to) =>
+      sendEmail({
+        to,
+        subject,
+        text: `${body}${link ? `\n\nOpen the article: ${link}` : ""}`,
+        html:
+          `<p>${body}</p>` +
+          (link
+            ? `<p><a href="${link}">Open <em>${a.articleTitle}</em></a></p>`
+            : `<p><em>${a.articleTitle}</em></p>`),
+      })
+    ),
+    postSlack({
+      text:
+        `:lock: *${submitterLabel}* submitted *${a.articleTitle}* for sign-off in Faro CMS.` +
+        (link ? ` <${link}|Review &amp; publish>` : ""),
+    }),
+  ]);
+}

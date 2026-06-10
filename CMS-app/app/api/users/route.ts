@@ -60,7 +60,11 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (u.role !== "tech-writer" && u.role !== "contributor") {
+      if (
+        u.role !== "tech-writer" &&
+        u.role !== "author" &&
+        u.role !== "contributor"
+      ) {
         return NextResponse.json(
           { error: `invalid role for ${u.email}` },
           { status: 400 }
@@ -68,13 +72,15 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Diff against the previous list to detect newly-added contributors so we
-    // can fire welcome notifications for them. Email is the unique key.
+    // Diff against the previous list to detect newly-added contributors and
+    // authors so we can fire welcome notifications for them. Email is the
+    // unique key.
     const previous = await loadExistingUsers();
     const previousEmails = new Set(previous.map((u) => u.email.toLowerCase()));
     const newContributors = (body.users as User[]).filter(
       (u) =>
-        u.role === "contributor" && !previousEmails.has(u.email.toLowerCase())
+        (u.role === "contributor" || u.role === "author") &&
+        !previousEmails.has(u.email.toLowerCase())
     );
 
     const data: UsersData = { users: body.users };

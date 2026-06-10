@@ -368,9 +368,10 @@ export default function PlatformSettingsPage() {
         <div className="card" style={{ maxWidth: 720, marginTop: 16 }}>
           <h2 style={{ fontSize: 16, marginBottom: 4 }}>Users & Roles</h2>
           <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 16 }}>
-            Tech writers have full access to the CMS. Contributors are subject-matter experts a tech
-            writer can share specific articles with for review. Roles are not enforced during the
-            current dev phase — auth wiring will pick this up later.
+            Tech writers have full access to the CMS. Authors can create and edit their own articles
+            but a tech writer must sign off before publishing. Contributors are subject-matter experts
+            a tech writer can share specific articles with for review. Roles are not enforced during
+            the current dev phase — auth wiring will pick this up later.
           </p>
 
           {usersLoaded && users.length > 0 && (
@@ -404,6 +405,7 @@ export default function PlatformSettingsPage() {
                     style={{ width: "auto", fontSize: 13, padding: "4px 8px" }}
                   >
                     <option value="tech-writer">Tech writer</option>
+                    <option value="author">Author</option>
                     <option value="contributor">Contributor</option>
                   </select>
                   <button
@@ -454,6 +456,7 @@ export default function PlatformSettingsPage() {
               style={{ fontSize: 13, padding: "6px 8px" }}
             >
               <option value="contributor">Contributor</option>
+              <option value="author">Author</option>
               <option value="tech-writer">Tech writer</option>
             </select>
             <button
