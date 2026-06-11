@@ -4,10 +4,13 @@ import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import type { VariableSet, VariableSetsData } from "@/lib/types";
 import { DragHandle } from "@/components/SortableList";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), { ssr: false });
 
 export default function VariablesPage() {
+  const { role, loaded } = useCurrentUser();
   const [data, setData] = useState<VariableSetsData>({ sets: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -155,6 +158,10 @@ export default function VariablesPage() {
 
   // ── Total count ──
   const totalVars = data.sets.reduce((sum, s) => sum + Object.keys(s.variables).length, 0);
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Variables" />;
+  }
 
   return (
     <>

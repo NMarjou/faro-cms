@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import type { ConditionsConfig, User, UserRole } from "@/lib/types";
 import Icon from "@/components/Icon";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const DEFAULT_COLORS = [
   "#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6",
@@ -10,6 +12,7 @@ const DEFAULT_COLORS = [
 ];
 
 export default function PlatformSettingsPage() {
+  const { role, loaded: userLoaded } = useCurrentUser();
   const [tags, setTags] = useState<string[]>([]);
   const [colors, setColors] = useState<Record<string, string>>({});
   const [newTag, setNewTag] = useState("");
@@ -201,6 +204,10 @@ export default function PlatformSettingsPage() {
   };
 
   const cssDirty = css !== cssOriginal;
+
+  if (userLoaded && role === "contributor") {
+    return <TechWriterBlocked title="Platform Settings" />;
+  }
 
   return (
     <>

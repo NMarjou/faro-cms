@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { Toc, TocCategory } from "@/lib/types";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 interface CompiledArticle {
   title: string;
@@ -38,6 +40,7 @@ function countArticles(cat: TocCategory): number {
 }
 
 export default function PublishPage() {
+  const { role, loaded } = useCurrentUser();
   const [toc, setToc] = useState<Toc | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -165,6 +168,10 @@ export default function PublishPage() {
       return next;
     });
   };
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Publish" />;
+  }
 
   return (
     <>

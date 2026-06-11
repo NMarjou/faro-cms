@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
 import { DragHandle } from "@/components/SortableList";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), { ssr: false });
 
 export default function TocPage() {
+  const { role, loaded } = useCurrentUser();
   const [toc, setToc] = useState<Toc | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -145,6 +148,10 @@ export default function TocPage() {
     };
     saveToc(updated);
   };
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Table of Contents" />;
+  }
 
   return (
     <>

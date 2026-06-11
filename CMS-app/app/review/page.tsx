@@ -12,22 +12,27 @@ interface QueueEntry {
   articleSlug: string;
   pending: number;
   previews: Suggestion[];
+  needsSignoff: boolean;
+  assignedCount: number;
+  reviewsDoneCount: number;
 }
 
 export default function ReviewQueuePage() {
   const { role, loaded: userLoaded } = useCurrentUser();
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [totalPending, setTotalPending] = useState(0);
+  const [totalSignoffs, setTotalSignoffs] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/suggestions")
-      .then((r) => (r.ok ? r.json() : { articles: [], totalPending: 0 }))
-      .then((d: { articles?: QueueEntry[]; totalPending?: number }) => {
+      .then((r) => (r.ok ? r.json() : { articles: [], totalPending: 0, totalSignoffs: 0 }))
+      .then((d: { articles?: QueueEntry[]; totalPending?: number; totalSignoffs?: number }) => {
         if (cancelled) return;
         setEntries(d.articles || []);
         setTotalPending(d.totalPending || 0);
+        setTotalSignoffs(d.totalSignoffs || 0);
       })
       .catch(() => {})
       .finally(() => {
@@ -57,18 +62,33 @@ export default function ReviewQueuePage() {
     <>
       <header className="main-header">
         <h1>Review Queue</h1>
-        {!loading && totalPending > 0 && (
-          <span
-            className="badge"
-            style={{
-              background: "var(--warning-light)",
-              color: "var(--warning)",
-              border: "1px solid var(--warning)",
-            }}
-          >
-            {totalPending} pending
-          </span>
-        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          {!loading && totalPending > 0 && (
+            <span
+              className="badge"
+              style={{
+                background: "var(--warning-light)",
+                color: "var(--warning)",
+                border: "1px solid var(--warning)",
+              }}
+            >
+              {totalPending} pending
+            </span>
+          )}
+          {!loading && totalSignoffs > 0 && (
+            <span
+              className="badge"
+              style={{
+                background: "var(--info-light)",
+                color: "var(--info)",
+                border: "1px solid var(--info)",
+              }}
+              title="Articles sent for review that are still awaiting your sign-off"
+            >
+              {totalSignoffs} awaiting sign-off
+            </span>
+          )}
+        </div>
       </header>
       <div className="main-body" style={{ backgroundImage: "var(--paper-grain)" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", width: "100%" }}>
@@ -81,14 +101,14 @@ export default function ReviewQueuePage() {
               fontStyle: "italic",
             }}
           >
-            Articles with suggestions waiting for your review.
+            Articles with suggestions to resolve or sign-offs to confirm.
           </p>
 
           {loading ? (
             <p style={{ color: "var(--fg-muted)", fontSize: 14 }}>Loading…</p>
           ) : entries.length === 0 ? (
             <div className="card" style={{ padding: 32, color: "var(--fg-muted)", fontSize: 14, textAlign: "center" }}>
-              No suggestions waiting. Nice and quiet.
+              Nothing waiting. Nice and quiet.
             </div>
           ) : (
             <div className="review-queue-list">
@@ -100,32 +120,57 @@ export default function ReviewQueuePage() {
                 >
                   <div className="review-queue-card-head">
                     <div className="review-queue-card-title">{e.articleTitle}</div>
-                    <span className="review-queue-card-count">
-                      <Icon name="git-pull-request" size={12} />
-                      {e.pending} pending
-                    </span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {e.pending > 0 && (
+                        <span className="review-queue-card-count">
+                          <Icon name="git-pull-request" size={12} />
+                          {e.pending} pending
+                        </span>
+                      )}
+                      {e.needsSignoff && (
+                        <span
+                          className="review-queue-card-count"
+                          style={{
+                            background: "var(--info-light)",
+                            color: "var(--info)",
+                            border: "1px solid var(--info)",
+                          }}
+                          title={
+                            e.assignedCount > 0
+                              ? `Awaiting your sign-off (${e.reviewsDoneCount}/${e.assignedCount} contributors done)`
+                              : "Awaiting your sign-off"
+                          }
+                        >
+                          <Icon name="check-circle" size={12} />
+                          Sign off
+                          {e.assignedCount > 0 ? ` (${e.reviewsDoneCount}/${e.assignedCount})` : ""}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="review-queue-card-path">{e.articleFile}</div>
-                  <div className="review-queue-card-previews">
-                    {e.previews.map((s) => (
-                      <div key={s.id} className="review-queue-preview">
-                        <span className="review-queue-preview-author">
-                          {s.authorName || s.author}
-                        </span>
-                        <span className="review-queue-preview-arrow">·</span>
-                        <span className="review-queue-preview-diff">
-                          <span className="diff-original">{s.originalText}</span>
-                          <span className="diff-arrow"> → </span>
-                          <span className="diff-suggested">{s.suggestedText}</span>
-                        </span>
-                      </div>
-                    ))}
-                    {e.pending > e.previews.length && (
-                      <div className="review-queue-preview-more">
-                        + {e.pending - e.previews.length} more
-                      </div>
-                    )}
-                  </div>
+                  {e.previews.length > 0 && (
+                    <div className="review-queue-card-previews">
+                      {e.previews.map((s) => (
+                        <div key={s.id} className="review-queue-preview">
+                          <span className="review-queue-preview-author">
+                            {s.authorName || s.author}
+                          </span>
+                          <span className="review-queue-preview-arrow">·</span>
+                          <span className="review-queue-preview-diff">
+                            <span className="diff-original">{s.originalText}</span>
+                            <span className="diff-arrow"> → </span>
+                            <span className="diff-suggested">{s.suggestedText}</span>
+                          </span>
+                        </div>
+                      ))}
+                      {e.pending > e.previews.length && (
+                        <div className="review-queue-preview-more">
+                          + {e.pending - e.previews.length} more
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </Link>
               ))}
             </div>
