@@ -5,15 +5,23 @@ import type { Suggestion, SuggestionsData, Toc, TocArticle } from "@/lib/types";
 /**
  * GET /api/suggestions
  *
- * Cross-article rollup. Walks the TOC, opens each article's sidecar
- * (`<article>.suggestions.json`) in parallel, and returns one entry per
- * article that has at least one *pending* suggestion. Used by the
- * /review queue page and the sidebar badge.
+ * Cross-article rollup for the tech-writer review queue. For every article
+ * in the TOC, opens the sidecar in parallel and reports anything that needs
+ * the tech writer's attention:
+ *
+ *   - **pending** > 0: contributor suggestions waiting for accept/reject
+ *   - **needsSignoff** true: article was sent for review and the tech
+ *     writer hasn't flipped the article-level `reviewComplete` flag yet.
  *
  * Returns:
  *   {
- *     articles: [{ articleFile, articleTitle, articleSlug, pending, previews }],
- *     totalPending: number
+ *     articles: [{
+ *       articleFile, articleTitle, articleSlug,
+ *       pending, previews,
+ *       needsSignoff, assignedCount, reviewsDoneCount
+ *     }],
+ *     totalPending: number,
+ *     totalSignoffs: number,
  *   }
  */
 
@@ -22,9 +30,10 @@ interface ArticleEntry {
   articleTitle: string;
   articleSlug: string;
   pending: number;
-  /** Up to 3 pending suggestion previews so the queue page doesn't need a
-   *  second roundtrip per article. */
   previews: Suggestion[];
+  needsSignoff: boolean;
+  assignedCount: number;
+  reviewsDoneCount: number;
 }
 
 function collectArticles(toc: Toc): TocArticle[] {
@@ -52,34 +61,47 @@ export async function GET() {
     const tocFile = await getFile("content/toc.json");
     toc = JSON.parse(tocFile.content);
   } catch {
-    return NextResponse.json({ articles: [], totalPending: 0 });
+    return NextResponse.json({ articles: [], totalPending: 0, totalSignoffs: 0 });
   }
 
   const articles = collectArticles(toc);
 
   const results = await Promise.all(
     articles.map(async (a): Promise<ArticleEntry | null> => {
+      const assignedCount = (a.assignedTo || []).length;
+      const reviewsDoneCount = (a.reviewsDone || []).length;
+      const needsSignoff = assignedCount > 0 && a.reviewComplete !== true;
+
+      let pending = 0;
+      let previews: Suggestion[] = [];
       try {
         const file = await getFile(sidecarPath(a.file));
         const data = JSON.parse(file.content) as SuggestionsData;
         const list = Array.isArray(data.suggestions) ? data.suggestions : [];
-        const pending = list.filter((s) => s.status === "pending");
-        if (pending.length === 0) return null;
-        return {
-          articleFile: a.file,
-          articleTitle: a.title,
-          articleSlug: a.slug,
-          pending: pending.length,
-          previews: pending.slice(0, 3),
-        };
+        const pendingList = list.filter((s) => s.status === "pending");
+        pending = pendingList.length;
+        previews = pendingList.slice(0, 3);
       } catch {
-        return null;
+        /* no sidecar — pending stays 0 */
       }
+
+      if (pending === 0 && !needsSignoff) return null;
+      return {
+        articleFile: a.file,
+        articleTitle: a.title,
+        articleSlug: a.slug,
+        pending,
+        previews,
+        needsSignoff,
+        assignedCount,
+        reviewsDoneCount,
+      };
     })
   );
 
   const filtered = results.filter((x): x is ArticleEntry => x !== null);
   const totalPending = filtered.reduce((sum, a) => sum + a.pending, 0);
+  const totalSignoffs = filtered.filter((a) => a.needsSignoff).length;
 
-  return NextResponse.json({ articles: filtered, totalPending });
+  return NextResponse.json({ articles: filtered, totalPending, totalSignoffs });
 }

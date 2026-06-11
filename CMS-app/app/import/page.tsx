@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 type TabType = "articles" | "toc" | "variables" | "snippets" | "images";
 
@@ -1062,6 +1064,7 @@ function escapeHtml(text: string): string {
 
 // ─── Main Page ───────────────────────────────────────────────────────
 export default function ImportPage() {
+  const { role, loaded } = useCurrentUser();
   const [activeTab, setActiveTab] = useState<TabType>("articles");
 
   const tabs: { key: TabType; label: string; icon: string }[] = [
@@ -1071,6 +1074,10 @@ export default function ImportPage() {
     { key: "snippets", label: "Snippets", icon: "M16 18l6-6-6-6|M8 6l-6 6 6 6" },
     { key: "images", label: "Images", icon: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5 5-2.5-2.5L3 17|M14 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6" },
   ];
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Import" />;
+  }
 
   return (
     <>

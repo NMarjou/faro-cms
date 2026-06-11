@@ -13,10 +13,26 @@ export interface TocArticle {
   assignedTo?: string[]; // emails of contributors the tech writer has shared this article with
   reviewsDone?: string[]; // emails of reviewers who have marked their review complete
   assignedBy?: string; // email of the tech writer who initiated the share (used for review-done notifications)
-  // ── Publish sign-off (author role) ──
-  approvalStatus?: "submitted"; // present only while an author's article awaits tech-writer sign-off
-  submittedBy?: string; // email of the author who submitted it for approval
-  submittedAt?: string; // ISO date the article was submitted
+  /**
+   * Tech-writer's article-level sign-off. Independent of `reviewsDone[]`
+   * (which is per-contributor). Set true when the tech writer marks the
+   * review complete; reset to undefined when reopened, when the article
+   * is sent for review again, or when the article body is saved
+   * (changed-since-signoff invalidates the approval). Publish is gated
+   * on this when assignedTo is non-empty.
+   */
+  reviewComplete?: boolean;
+  reviewCompletedBy?: string; // tech writer email who signed off
+  reviewCompletedAt?: string; // ISO timestamp
+  /**
+   * Foundation for the Published status. Stays undefined until we wire up
+   * a post-merge hook on the publish PR — once that exists it'll flip true
+   * and the status helper will surface "Published" on the surfaces that
+   * use it. Kept on the article entry (not the TOC root) so each article's
+   * publish state can drift independently.
+   */
+  published?: boolean;
+  publishedAt?: string; // ISO timestamp of the merge that published it
 }
 
 export interface TocSection {
@@ -167,6 +183,12 @@ export interface SearchEntry {
   section: string;
   bodyText: string; // stripped plain text for indexing
   filePath: string;
+  // Status-derivable fields copied from the TOC entry so search results
+  // can render an ArticleStatusBadge without a second fetch. The badge
+  // helper derives status purely from these; no other fields needed.
+  assignedTo?: string[];
+  reviewComplete?: boolean;
+  published?: boolean;
 }
 
 // ── Glossary ──

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import Icon from "@/components/Icon";
+import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   canEditArticle,
@@ -93,6 +94,11 @@ export default function EditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Warning banner used for "soft" blocks that aren't errors — e.g. the
+  // mark-review-done gate fires when comments/suggestions are still open.
+  // Distinct from `error` so we can render in warning (not danger) color
+  // and share a single banner between contributor and tech-writer flows.
+  const [warning, setWarning] = useState<string | null>(null);
   const [articleMeta, setArticleMeta] = useState<TocArticle | null>(null);
   const [format, setFormat] = useState<"html" | "mdx">("html");
   const [initialContent, setInitialContent] = useState<JSONContent | null>(null);
@@ -296,9 +302,11 @@ export default function EditorPage() {
         throw new Error(data.error || "Save failed");
       }
 
-      // Update lastModified in TOC. When the owner edits an article that was
-      // awaiting sign-off, the edit invalidates the prior submission — clear
-      // the approval status so a tech writer re-approves the new content.
+      // Update lastModified in TOC. Saving body content after a sign-off
+      // also clears the sign-off — the article has effectively changed
+      // since the tech writer approved it, so it must be re-signed before
+      // publish. Reset the local articleMeta to match.
+      let clearedSignoff = false;
       if (articleMeta) {
         const tocRes = await fetch("/api/toc");
         if (tocRes.ok) {
@@ -306,12 +314,11 @@ export default function EditorPage() {
           const art = findArticleInToc(toc, filePath);
           if (art) {
             art.lastModified = new Date().toISOString().split("T")[0];
-            const clearedApproval =
-              isOwner && art.approvalStatus === "submitted";
-            if (clearedApproval) {
-              delete art.approvalStatus;
-              delete art.submittedBy;
-              delete art.submittedAt;
+            if (art.reviewComplete) {
+              delete art.reviewComplete;
+              delete art.reviewCompletedBy;
+              delete art.reviewCompletedAt;
+              clearedSignoff = true;
             }
             await fetch("/api/toc", {
               method: "PUT",
@@ -332,6 +339,19 @@ export default function EditorPage() {
             }
           }
         }
+      }
+
+      if (clearedSignoff) {
+        setArticleMeta((p) =>
+          p
+            ? {
+                ...p,
+                reviewComplete: undefined,
+                reviewCompletedBy: undefined,
+                reviewCompletedAt: undefined,
+              }
+            : p
+        );
       }
 
       setIsDirty(false);
@@ -359,6 +379,18 @@ export default function EditorPage() {
   }, [autosaveInterval, isDirty, saving]);
 
   const handlePublish = async () => {
+    // Local gate: this article was sent for review and isn't signed off
+    // yet — bail before we save+publish. The server-side gate in
+    // /api/publish covers other articles on the working branch and the
+    // edge case where saving (just below) clears `reviewComplete`.
+    if (
+      articleMeta?.assignedTo &&
+      articleMeta.assignedTo.length > 0 &&
+      !articleMeta.reviewComplete
+    ) {
+      setError("This article is in review. Sign off before publishing.");
+      return;
+    }
     await handleSave();
     try {
       const res = await fetch("/api/publish", {
@@ -502,6 +534,103 @@ export default function EditorPage() {
     }
   };
 
+  /**
+   * Format the gate-blocked message so the verb matches the role's action
+   * label ("mark review done" for contributor, "sign off" for tech-writer).
+   */
+  const formatBlockedMessage = (
+    action: "mark review done" | "sign off",
+    unresolvedComments: number,
+    pendingSuggestions: number
+  ): string => {
+    const parts: string[] = [];
+    if (unresolvedComments > 0) {
+      parts.push(
+        `${unresolvedComments} unresolved comment${unresolvedComments === 1 ? "" : "s"}`
+      );
+    }
+    if (pendingSuggestions > 0) {
+      parts.push(
+        `${pendingSuggestions} pending suggestion${pendingSuggestions === 1 ? "" : "s"}`
+      );
+    }
+    return parts.length === 0
+      ? `Cannot ${action} — items are still outstanding.`
+      : `Cannot ${action} — resolve ${parts.join(" and ")} first.`;
+  };
+
+  /**
+   * Tech-writer's article-level review sign-off. Calls /api/article/review-done
+   * which validates outstanding comments + suggestions server-side. A 409
+   * here is a "soft" block — render the warning banner with counts instead
+   * of the danger error banner.
+   */
+  const handleTechWriterToggleReviewDone = async () => {
+    const senderEmail =
+      typeof window !== "undefined"
+        ? localStorage.getItem("cms-current-user") || undefined
+        : undefined;
+    if (!senderEmail) {
+      setError("No active identity. Set yourself in Settings first.");
+      return;
+    }
+    setWarning(null);
+    setError(null);
+    const currentlyComplete = articleMeta?.reviewComplete === true;
+    try {
+      const res = await fetch("/api/article/review-done", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: filePath,
+          reviewerEmail: senderEmail,
+          done: !currentlyComplete,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        setWarning(
+          formatBlockedMessage(
+            "sign off",
+            data.unresolvedComments ?? 0,
+            data.pendingSuggestions ?? 0
+          )
+        );
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update review status");
+      }
+      setArticleMeta((p) =>
+        p
+          ? {
+              ...p,
+              reviewComplete: data.reviewComplete || undefined,
+              reviewCompletedBy: data.reviewCompletedBy,
+              reviewCompletedAt: data.reviewCompletedAt,
+            }
+          : p
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update review status");
+    }
+  };
+
+  /**
+   * Contributor's mark-done block-callback. Editor.tsx hits it after the API
+   * gates the action so the warning surfaces in the same banner the
+   * tech-writer sees.
+   */
+  const handleMarkReviewDoneBlocked = useCallback(
+    (unresolvedComments: number, pendingSuggestions: number) => {
+      setError(null);
+      setWarning(
+        formatBlockedMessage("mark review done", unresolvedComments, pendingSuggestions)
+      );
+    },
+    []
+  );
+
   // Persist updated assignment list and fan out review notifications via the
   // dedicated share endpoint. The endpoint handles the TOC write, diffs the
   // previous reviewer set, and only emails the newly-added ones.
@@ -604,6 +733,7 @@ export default function EditorPage() {
           <button onClick={() => router.push(isSnippet ? "/snippets" : "/articles")} className="btn btn-sm">Back</button>
           <h1 style={{ fontSize: 16 }}>{title}</h1>
           <span className="badge">{isSnippet ? "SNIPPET" : format.toUpperCase()}</span>
+          {!isSnippet && articleMeta && <ArticleStatusBadge article={articleMeta} />}
           {isDirty ? (
             <span className="badge" style={{ background: "var(--warning-light)", color: "var(--warning)" }}>Unsaved</span>
           ) : lastAutoSaved ? (
@@ -655,61 +785,74 @@ export default function EditorPage() {
           )}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {canEdit && (
-            <button
-              onClick={() => setShowMeta((p) => !p)}
-              className={`btn btn-sm${showMeta ? " btn-primary" : ""}`}
-              title="Article metadata"
-            >
-              Meta
-            </button>
-          )}
-          {canEdit && (
-            <button
-              onClick={handleSave}
-              disabled={saving || !isDirty}
-              className="btn btn-icon"
-              aria-label={saving ? "Saving" : "Save"}
-              title={saving ? "Saving…" : isDirty ? "Save (Cmd/Ctrl+S)" : "No unsaved changes"}
-              style={{
-                opacity: saving || !isDirty ? 0.5 : 1,
-                borderColor: isDirty ? "var(--accent)" : undefined,
-              }}
-            >
-              <Icon name="floppy-disk" size={16} />
-            </button>
-          )}
-          {!isSnippet && articleMeta && isTechWriter(role) && (
-            <button
-              onClick={() => setShowReviewDrawer(true)}
-              className="btn btn-gold"
-              title="Share this article with a contributor for review"
-            >
-              Send for Review{articleMeta.assignedTo && articleMeta.assignedTo.length > 0
-                ? ` (${articleMeta.assignedTo.length})`
-                : ""}
-            </button>
-          )}
-          {showSubmitForApproval && (
-            <button
-              onClick={handleSubmitForApproval}
-              className="btn btn-gold"
-              title="Submit this article for a tech writer to review and publish"
-            >
-              Submit for approval
-            </button>
-          )}
-          {!isSnippet && role === "author" && isOwner && isSubmitted && (
-            <button
-              className="btn btn-sm"
-              disabled
-              title="Awaiting tech-writer sign-off"
-              style={{ opacity: 0.6 }}
-            >
-              Submitted
-            </button>
-          )}
-          {canPublish(role) && (
+          <button
+            onClick={() => setShowMeta((p) => !p)}
+            className={`btn btn-sm${showMeta ? " btn-primary" : ""}`}
+            title="Article metadata"
+          >
+            Meta
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+            className="btn btn-icon"
+            aria-label={saving ? "Saving" : "Save"}
+            title={saving ? "Saving…" : isDirty ? "Save (Cmd/Ctrl+S)" : "No unsaved changes"}
+            style={{
+              opacity: saving || !isDirty ? 0.5 : 1,
+              borderColor: isDirty ? "var(--accent)" : undefined,
+            }}
+          >
+            <Icon name="floppy-disk" size={16} />
+          </button>
+          {/* Hide Send for Review once the article is signed off AND there
+              are no unsaved edits — a clean sign-off state means no new
+              changes need contributor input. The moment the tech writer
+              starts typing (isDirty=true) the button reappears so they
+              can request a new review round if the changes warrant it. */}
+          {!isSnippet &&
+            articleMeta &&
+            !isContributor &&
+            !(articleMeta.reviewComplete && !isDirty) && (
+              <button
+                onClick={() => setShowReviewDrawer(true)}
+                className="btn"
+                title="Share this article with a contributor for review"
+              >
+                Send for Review{articleMeta.assignedTo && articleMeta.assignedTo.length > 0
+                  ? ` (${articleMeta.assignedTo.length})`
+                  : ""}
+              </button>
+            )}
+          {/* Tech-writer's article-level sign-off. Only visible when the
+              article was actually sent for review. Mirrors the contributor's
+              "Mark as done" visual language with the same gold/check
+              styling so "complete this review round" reads consistently. */}
+          {!isSnippet &&
+            articleMeta &&
+            !isContributor &&
+            articleMeta.assignedTo &&
+            articleMeta.assignedTo.length > 0 &&
+            (articleMeta.reviewComplete ? (
+              <button
+                onClick={handleTechWriterToggleReviewDone}
+                title="Reopen the review (re-enables comments and suggestions)"
+                className="btn btn-inline-icon btn-review-done"
+              >
+                <Icon name="check-circle" weight="fill" size={16} />
+                Signed off
+              </button>
+            ) : (
+              <button
+                onClick={handleTechWriterToggleReviewDone}
+                title="Approve this article for publish — distinct from a contributor's per-reviewer mark-as-done"
+                className="btn btn-gold btn-inline-icon"
+              >
+                <Icon name="check" weight="bold" size={16} />
+                Sign off
+              </button>
+            ))}
+          {!isContributor && (
             <button onClick={handlePublish} className="btn btn-primary">Publish</button>
           )}
         </div>
@@ -724,6 +867,62 @@ export default function EditorPage() {
         />
       )}
       <div className="main-body article-editor">
+        {/* Contributor-facing banner: surfaces the tech writer's sign-off
+            so contributors understand why Suggest Changes disappeared. */}
+        {!isSnippet && isContributor && articleMeta?.reviewComplete && (
+          <div
+            style={{
+              background: "var(--success-light, var(--info-light))",
+              color: "var(--success, var(--info))",
+              padding: "10px 16px",
+              borderRadius: "var(--radius)",
+              marginBottom: 16,
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <Icon name="check-circle" weight="fill" size={16} />
+            <span>
+              The tech writer has signed off this article&apos;s review.
+              {articleMeta.reviewCompletedBy ? ` Signed off by ${articleMeta.reviewCompletedBy}.` : ""}
+            </span>
+          </div>
+        )}
+        {warning && (
+          <div
+            style={{
+              background: "var(--warning-light)",
+              color: "var(--warning)",
+              padding: "10px 16px",
+              borderRadius: "var(--radius)",
+              marginBottom: 16,
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <span>{warning}</span>
+            <button
+              onClick={() => setWarning(null)}
+              aria-label="Dismiss"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--warning)",
+                fontSize: 16,
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              &times;
+            </button>
+          </div>
+        )}
         {error && (
           <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>
             {error}
@@ -848,11 +1047,13 @@ export default function EditorPage() {
             filePath={filePath}
             assignedTo={articleMeta?.assignedTo}
             reviewsDone={articleMeta?.reviewsDone}
+            reviewComplete={articleMeta?.reviewComplete}
             onReviewDoneChanged={(next) =>
               setArticleMeta((p) =>
                 p ? { ...p, reviewsDone: next.length > 0 ? next : undefined } : p
               )
             }
+            onMarkReviewDoneBlocked={handleMarkReviewDoneBlocked}
             initialContent={format === "html" ? undefined : initialContent || undefined}
             initialHtml={format === "html" ? initialHtml : undefined}
             variables={variables}

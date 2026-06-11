@@ -29,18 +29,19 @@ export default function SidebarTree() {
   // the limited shell renders during the brief load rather than flashing tools.
   const techWriter = isTechWriter(role);
 
-  // Review-queue badge — tech writers see a count of pending suggestions
-  // across all articles. Cheap GET; refreshed on identity change and via
-  // the same `cms-identity-changed` custom event other surfaces listen for.
+  // Review-queue badge — tech writers see a count of items needing their
+  // attention across all articles (pending suggestions + awaiting sign-off).
+  // Cheap GET; refreshed on identity change and via the same
+  // `cms-identity-changed` custom event other surfaces listen for.
   const [reviewPending, setReviewPending] = useState(0);
   useEffect(() => {
     if (!techWriter) return;
     let cancelled = false;
     const fetchCount = () => {
       fetch("/api/suggestions")
-        .then((r) => (r.ok ? r.json() : { totalPending: 0 }))
-        .then((d: { totalPending?: number }) => {
-          if (!cancelled) setReviewPending(d.totalPending || 0);
+        .then((r) => (r.ok ? r.json() : { totalPending: 0, totalSignoffs: 0 }))
+        .then((d: { totalPending?: number; totalSignoffs?: number }) => {
+          if (!cancelled) setReviewPending((d.totalPending || 0) + (d.totalSignoffs || 0));
         })
         .catch(() => {});
     };

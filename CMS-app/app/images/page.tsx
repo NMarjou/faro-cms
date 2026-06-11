@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
   ssr: false,
@@ -20,6 +22,7 @@ interface ImagesData {
 }
 
 export default function ImagesPage() {
+  const { role, loaded } = useCurrentUser();
   const [data, setData] = useState<ImagesData>({ folders: [], images: [] });
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -245,6 +248,10 @@ export default function ImagesPage() {
   const rootFolders = getChildFolders(currentFolder);
   const rootImages = getImagesInFolder(currentFolder);
   const isInSubfolder = currentFolder !== "";
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Images" />;
+  }
 
   return (
     <>

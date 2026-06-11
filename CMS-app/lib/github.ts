@@ -44,20 +44,43 @@ export function workingBranch(): string {
 }
 
 let workingBranchEnsured = false;
+let ensurePromise: Promise<void> | null = null;
 
 // Make sure the working branch exists on the remote (forked from defaultBranch
 // if missing). Cheap after the first call per process: a single branchExists
 // round-trip, then a short-circuit. If working === default, nothing to do.
-export async function ensureWorkingBranch(): Promise<void> {
-  if (workingBranchEnsured) return;
-  const wb = workingBranch();
-  if (wb === defaultBranch()) {
+//
+// Concurrent callers share a single in-flight promise so we don't race on
+// branchExists/createBranch — a single request that triggers several parallel
+// getFile/putFile calls (e.g. the review-done gate's 3 parallel sidecar
+// reads) would otherwise issue several createBranch attempts and the
+// trailing ones would hit GitHub's "Reference already exists" (422).
+export function ensureWorkingBranch(): Promise<void> {
+  if (workingBranchEnsured) return Promise.resolve();
+  if (ensurePromise) return ensurePromise;
+  ensurePromise = (async () => {
+    const wb = workingBranch();
+    if (wb === defaultBranch()) {
+      workingBranchEnsured = true;
+      return;
+    }
+    const exists = await branchExists(wb);
+    if (!exists) {
+      try {
+        await createBranch(wb);
+      } catch (err) {
+        // 422 here means a parallel caller (or a previous failed attempt
+        // whose flag didn't latch) already created the branch. Safe to
+        // treat as success.
+        const status = (err as { status?: number })?.status;
+        if (status !== 422) throw err;
+      }
+    }
     workingBranchEnsured = true;
-    return;
-  }
-  const exists = await branchExists(wb);
-  if (!exists) await createBranch(wb);
-  workingBranchEnsured = true;
+  })().finally(() => {
+    ensurePromise = null;
+  });
+  return ensurePromise;
 }
 
 // ── Read operations ──

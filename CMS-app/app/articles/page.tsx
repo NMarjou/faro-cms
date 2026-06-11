@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Toc, TocCategory, TocArticle } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import { canCreateArticles } from "@/lib/permissions";
+import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 
 export default function ArticlesPage() {
   const { role } = useCurrentUser();
@@ -248,7 +248,61 @@ export default function ArticlesPage() {
                           </button>
                           {expandedSections.has(section.slug) && (
                             <div style={{ paddingLeft: 24 }}>
-                              {section.articles.map(renderArticleRow)}
+                              {section.articles.map(
+                                (article: TocArticle) => {
+                                  const reviewDone =
+                                    !!article.reviewsDone && article.reviewsDone.length > 0;
+                                  const allReviewersDone =
+                                    reviewDone &&
+                                    article.assignedTo &&
+                                    article.assignedTo.length === article.reviewsDone!.length;
+                                  return (
+                                    <Link
+                                      key={article.slug}
+                                      href={`/editor/${encodeURIComponent(article.file)}`}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        padding: "6px 12px",
+                                        fontSize: 14,
+                                        borderRadius: "var(--radius)",
+                                        color: "var(--fg)",
+                                        background: reviewDone
+                                          ? "var(--success-light)"
+                                          : undefined,
+                                        borderLeft: reviewDone
+                                          ? "3px solid var(--success)"
+                                          : "3px solid transparent",
+                                      }}
+                                    >
+                                      <span style={{ flex: 1 }}>{article.title}</span>
+                                      <ArticleStatusBadge article={article} />
+                                      {reviewDone && (
+                                        <span
+                                          title={`Review done by: ${article.reviewsDone!.join(", ")}`}
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            color: "var(--success)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: 4,
+                                          }}
+                                        >
+                                          ✓ Review done
+                                          {article.assignedTo && article.assignedTo.length > 0 && (
+                                            <span style={{ opacity: 0.75, fontWeight: 500 }}>
+                                              ({article.reviewsDone!.length}/{article.assignedTo.length})
+                                            </span>
+                                          )}
+                                          {allReviewersDone && <span style={{ marginLeft: 2 }}>·</span>}
+                                        </span>
+                                      )}
+                                    </Link>
+                                  );
+                                }
+                              )}
                             </div>
                           )}
                         </div>

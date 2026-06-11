@@ -309,51 +309,56 @@ export async function notifyReviewMarkedDone(n: ReviewMarkedDone): Promise<void>
   ]);
 }
 
-interface ArticleSubmittedForApproval {
-  /** Tech writer(s) to notify — they sign off by publishing. */
+interface ReviewSignedOff {
+  /** Contributors to ping — typically the article's `assignedTo` list. */
   recipientEmails: string[];
-  /** The author who submitted the article. */
-  submitterEmail: string;
-  submitterName?: string;
+  /** Map of email → display name so the email greeting can be personal. */
+  recipientNames?: Record<string, string | undefined>;
+  /** The tech writer who signed off. */
+  techWriterName: string;
+  techWriterEmail?: string;
   articleTitle: string;
   articleFile: string;
   baseUrl?: string;
 }
 
 /**
- * Fired when an author submits one of their own articles for tech-writer
- * sign-off. Lands one email per tech writer + a single Slack post. Publishing
- * the article is the sign-off — there's no separate approve action.
+ * Fired when a tech writer flips the article-level `reviewComplete` flag.
+ * Pings each contributor who was assigned to the review so they know the
+ * round closed and their suggestions won't be actioned further.
  */
-export async function notifyArticleSubmittedForApproval(
-  a: ArticleSubmittedForApproval
+export async function notifyReviewSignedOff(
+  n: ReviewSignedOff
 ): Promise<void> {
-  if (a.recipientEmails.length === 0) return;
-  const submitterLabel = displayName(a.submitterEmail, a.submitterName);
-  const link = a.baseUrl
-    ? `${a.baseUrl.replace(/\/$/, "")}/editor/${encodeURIComponent(a.articleFile)}`
+  if (n.recipientEmails.length === 0) return;
+  const link = n.baseUrl
+    ? `${n.baseUrl.replace(/\/$/, "")}/editor/${encodeURIComponent(n.articleFile)}`
     : null;
-
-  const subject = `Approval requested: ${a.articleTitle}`;
-  const body = `${submitterLabel} submitted "${a.articleTitle}" for your sign-off in Faro CMS. Review it and publish to approve.`;
+  const subject = `Review signed off: ${n.articleTitle}`;
 
   await Promise.all([
-    ...a.recipientEmails.map((to) =>
-      sendEmail({
+    ...n.recipientEmails.map((to) => {
+      const firstName = displayName(to, n.recipientNames?.[to.toLowerCase()]).split(" ")[0];
+      const body =
+        `${n.techWriterName} has marked the review of "${n.articleTitle}" as done. ` +
+        `The review round is now closed — thanks for your input.`;
+      return sendEmail({
         to,
         subject,
-        text: `${body}${link ? `\n\nOpen the article: ${link}` : ""}`,
+        text:
+          `Hello ${firstName},\n\n${body}` +
+          (link ? `\n\nOpen the article: ${link}` : ""),
         html:
-          `<p>${body}</p>` +
+          `<p>Hello ${firstName},</p><p>${body}</p>` +
           (link
-            ? `<p><a href="${link}">Open <em>${a.articleTitle}</em></a></p>`
-            : `<p><em>${a.articleTitle}</em></p>`),
-      })
-    ),
+            ? `<p><a href="${link}">Open <em>${n.articleTitle}</em></a></p>`
+            : ""),
+      });
+    }),
     postSlack({
       text:
-        `:lock: *${submitterLabel}* submitted *${a.articleTitle}* for sign-off in Faro CMS.` +
-        (link ? ` <${link}|Review &amp; publish>` : ""),
+        `:lock: *${n.techWriterName}* signed off the review of *${n.articleTitle}*.` +
+        (link ? ` <${link}|Open article>` : ""),
     }),
   ]);
 }

@@ -52,8 +52,21 @@ interface EditorProps {
   assignedTo?: string[];
   /** Emails of reviewers who have already marked this article's review done. */
   reviewsDone?: string[];
+  /** Article-level sign-off from the tech writer. When true the contributor
+   *  toolbar hides Suggest Changes and the contributor banner explains the
+   *  state. Comments remain available either way. */
+  reviewComplete?: boolean;
   /** Bubbled up after a Mark-as-done flip so the page can refresh its TOC view. */
   onReviewDoneChanged?: (next: string[]) => void;
+  /**
+   * Fires when the contributor attempts mark-as-done but the API gates it
+   * (unresolved comments / pending suggestions). The page renders the
+   * banner so the visual matches the tech-writer flow.
+   */
+  onMarkReviewDoneBlocked?: (
+    unresolvedComments: number,
+    pendingSuggestions: number
+  ) => void;
   initialContent?: JSONContent;
   initialHtml?: string;
   variables?: Variables;
@@ -88,7 +101,9 @@ export default function Editor({
   filePath,
   assignedTo,
   reviewsDone,
+  reviewComplete,
   onReviewDoneChanged,
+  onMarkReviewDoneBlocked,
   initialContent,
   initialHtml,
   variables = {},
@@ -534,13 +549,33 @@ export default function Editor({
           done: !hasMarkedReviewDone,
         }),
       });
+      const data: {
+        reviewsDone?: string[];
+        error?: string;
+        pendingSuggestions?: number;
+        unresolvedComments?: number;
+      } = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        // Soft block — let the page render the warning banner so the
+        // contributor's experience matches the tech-writer's.
+        onMarkReviewDoneBlocked?.(
+          data.unresolvedComments ?? 0,
+          data.pendingSuggestions ?? 0
+        );
+        return;
+      }
       if (!res.ok) return;
-      const data: { reviewsDone?: string[] } = await res.json();
       onReviewDoneChanged?.(data.reviewsDone || []);
     } catch {
       /* surfaced in dev log */
     }
-  }, [filePath, currentUser?.email, hasMarkedReviewDone, onReviewDoneChanged]);
+  }, [
+    filePath,
+    currentUser?.email,
+    hasMarkedReviewDone,
+    onReviewDoneChanged,
+    onMarkReviewDoneBlocked,
+  ]);
 
   const editor = useEditor({
     // Defer initial render to client mount to skip TipTap's SSR-safety
@@ -821,6 +856,7 @@ export default function Editor({
             reviewDone={hasMarkedReviewDone}
             markDoneBlockedReason={markDoneBlockedReason}
             onMarkReviewDone={handleToggleReviewDone}
+            reviewLocked={reviewComplete === true}
           />
         )}
         <button

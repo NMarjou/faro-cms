@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 interface UnresolvedLink {
   sourceFile: string;
@@ -29,6 +31,7 @@ interface ScanResult {
 }
 
 export default function LinkMapperPage() {
+  const { role, loaded } = useCurrentUser();
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
@@ -187,6 +190,10 @@ export default function LinkMapperPage() {
   const mappedCount = Object.keys(mappings).filter((k) => !skipped.has(k)).length;
   const skippedCount = skipped.size;
   const totalUnresolved = result?.unresolvedLinks.length || 0;
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Link Mapper" />;
+  }
 
   return (
     <>

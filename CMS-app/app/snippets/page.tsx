@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
   ssr: false,
@@ -26,6 +28,7 @@ type CreatingAt =
   | { type: "snippet"; folder: string };
 
 export default function SnippetsPage() {
+  const { role, loaded } = useCurrentUser();
   const [data, setData] = useState<SnippetsData>({ folders: [], snippets: [] });
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -246,6 +249,10 @@ export default function SnippetsPage() {
   const rootSnippets = getSnippetsInFolder(currentFolder);
   // For breadcrumb navigation: when in a subfolder, show that folder's direct children
   const isInSubfolder = currentFolder !== "";
+
+  if (loaded && role === "contributor") {
+    return <TechWriterBlocked title="Snippets" />;
+  }
 
   return (
     <>
