@@ -1,0 +1,24 @@
+{
+  "users": [
+    {
+      "email": "nolwenn.marjou@beqom.com",
+      "role": "tech-writer",
+      "name": "Nolwenn Marjou"
+    },
+    {
+      "email": "anna.wyszynka@beqom.com",
+      "role": "tech-writer",
+      "name": "Anna Wyszynka"
+    },
+    {
+      "email": "test.author@beqom.com",
+      "role": "author",
+      "name": "Test Author"
+    },
+    {
+      "email": "test.contributor@beqom.com",
+      "role": "contributor",
+      "name": "Test Contributor"
+    }
+  ]
+}

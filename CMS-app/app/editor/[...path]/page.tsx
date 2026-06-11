@@ -7,6 +7,13 @@ import dynamic from "next/dynamic";
 import Icon from "@/components/Icon";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import {
+  canEditArticle,
+  canPublish,
+  canSubmitForApproval,
+  isTechWriter,
+  ownsArticle,
+} from "@/lib/permissions";
 import type {
   Variables,
   GlossaryTerm,
@@ -81,12 +88,8 @@ export default function EditorPage() {
   const router = useRouter();
   const pathSegments = params.path as string[];
   const filePath = pathSegments.map(decodeURIComponent).join("/");
-  const { role, loaded: userLoaded } = useCurrentUser();
-  // Default to "contributor" while the identity is still resolving — gives
-  // contributors a stable read-only mount instead of a brief editable flash
-  // and prevents the tech-writer toolbar from appearing for a frame. Tech
-  // writers see the full toolbar as soon as their role lands.
-  const isContributor = !userLoaded || role === "contributor";
+  const { user, role, loaded: userLoaded } = useCurrentUser();
+  const currentEmail = user?.email ?? null;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -134,6 +137,28 @@ export default function EditorPage() {
   const [autosaveInterval, setAutosaveInterval] = useState(120); // seconds
   const [lastAutoSaved, setLastAutoSaved] = useState<string | null>(null);
   const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
+
+  // ── Permission gating ──
+  // Edit rights: tech writers edit anything; authors edit only articles they
+  // own; everyone else is read-only (view + comment/suggest). We wait for
+  // `articleMeta` before granting an author edit access so we don't flash an
+  // editable surface before ownership is known — tech writers don't wait
+  // (canEditArticle is true regardless of ownership). Snippets are
+  // tech-writer-only territory (nav-gated), so non-tech-writers stay read-only.
+  const canEdit =
+    userLoaded &&
+    (isTechWriter(role)
+      ? true
+      : isSnippet
+        ? false
+        : !!articleMeta && canEditArticle(role, articleMeta, currentEmail));
+  const isOwner = ownsArticle(articleMeta, currentEmail);
+  const isSubmitted = articleMeta?.approvalStatus === "submitted";
+  // Authors submit owned articles for tech-writer sign-off instead of publishing.
+  const showSubmitForApproval =
+    !isSnippet &&
+    canSubmitForApproval(role, articleMeta, currentEmail) &&
+    !isSubmitted;
 
   // Load autosave interval from localStorage
   useEffect(() => {
@@ -300,6 +325,18 @@ export default function EditorPage() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ toc }),
             });
+            if (clearedApproval) {
+              setArticleMeta((p) =>
+                p
+                  ? {
+                      ...p,
+                      approvalStatus: undefined,
+                      submittedBy: undefined,
+                      submittedAt: undefined,
+                    }
+                  : p
+              );
+            }
           }
         }
       }
@@ -367,8 +404,65 @@ export default function EditorPage() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Publish failed"); }
       const data = await res.json();
       setPublishUrl(data.prUrl);
+
+      // Publishing is the sign-off: if this article was awaiting approval,
+      // clear its submitted status now that a tech writer has shipped it.
+      if (articleMeta && isSubmitted) {
+        const tocRes = await fetch("/api/toc");
+        if (tocRes.ok) {
+          const toc = await tocRes.json();
+          const art = findArticleInToc(toc, filePath);
+          if (art && art.approvalStatus === "submitted") {
+            delete art.approvalStatus;
+            delete art.submittedBy;
+            delete art.submittedAt;
+            await fetch("/api/toc", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ toc, message: `Approve & publish ${art.title}` }),
+            });
+            setArticleMeta((p) =>
+              p
+                ? {
+                    ...p,
+                    approvalStatus: undefined,
+                    submittedBy: undefined,
+                    submittedAt: undefined,
+                  }
+                : p
+            );
+          }
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed");
+    }
+  };
+
+  // Author submits an owned article for tech-writer sign-off.
+  const handleSubmitForApproval = async () => {
+    if (!articleMeta || !currentEmail) return;
+    setError(null);
+    try {
+      // Persist any pending edits first so reviewers see the latest content.
+      if (isDirty) await handleSave();
+      const res = await fetch("/api/article/submit-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: filePath, submittedBy: currentEmail }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to submit for approval");
+      }
+      const today = new Date().toISOString().split("T")[0];
+      setArticleMeta((p) =>
+        p
+          ? { ...p, approvalStatus: "submitted", submittedBy: currentEmail, submittedAt: today }
+          : p
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit for approval");
     }
   };
 
@@ -669,6 +763,26 @@ export default function EditorPage() {
               )}
             </span>
           )}
+          {/* Awaiting tech-writer sign-off. Visible to everyone who opens the
+              article — the author sees their submission stuck pending; the
+              tech writer sees what's waiting to be reviewed & published. */}
+          {isSubmitted && (
+            <span
+              className="badge"
+              style={{
+                background: "var(--warning-light)",
+                color: "var(--warning)",
+                border: "1px solid var(--warning)",
+              }}
+              title={
+                articleMeta?.submittedBy
+                  ? `Submitted for approval by ${articleMeta.submittedBy}${articleMeta.submittedAt ? ` on ${articleMeta.submittedAt}` : ""}`
+                  : "Submitted for approval"
+              }
+            >
+              Submitted for approval
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
@@ -951,12 +1065,13 @@ export default function EditorPage() {
             onChange={handleEditorChange}
             onSave={handleSave}
             onEditorReady={(editor) => { editorRef.current = { getHTML: () => editor.getHTML(), getSelectedText: () => editor.getSelectedText(), setContent: (html: string) => { editor.commands.setContent(html); } }; }}
-            mode={isContributor ? "review" : "full"}
+            mode={canEdit ? "full" : "review"}
             // Editor.tsx owns the unified ReviewSidebar + handler internally;
             // we don't pass onSuggestChanges so the internal handler wins.
-            // Contributors get no source-view toggle — they shouldn't see raw HTML.
-            viewMode={isContributor ? undefined : viewMode}
-            onViewModeChange={isContributor ? undefined : (mode) => {
+            // Only editors get the source-view toggle — viewers (read-only)
+            // shouldn't see raw HTML.
+            viewMode={canEdit ? viewMode : undefined}
+            onViewModeChange={!canEdit ? undefined : (mode) => {
               if (mode === "source") {
                 const selectedText = editorRef.current?.getSelectedText() || "";
                 if (isDirty) handleSave();

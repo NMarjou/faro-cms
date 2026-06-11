@@ -6,7 +6,9 @@ import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
-const SortableList = dynamic(() => import("@/components/SortableList"), { ssr: false });
+const SortableList = dynamic(() => import("@/components/SortableList"), {
+  ssr: false,
+}) as typeof import("@/components/SortableList").default;
 
 interface ImageInfo {
   name: string;

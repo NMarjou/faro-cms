@@ -62,6 +62,8 @@ export default function NewArticlePage() {
           format: "html",
           createdDate: new Date().toISOString().split("T")[0],
           lastModified: new Date().toISOString().split("T")[0],
+          // Record the creator as the owner — gates who may edit it later.
+          ...(user?.email ? { author: user.email } : {}),
         });
         await fetch("/api/toc", {
           method: "PUT",

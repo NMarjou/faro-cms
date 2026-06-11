@@ -9,7 +9,7 @@ export interface TocArticle {
   conditions?: string[];
   createdDate?: string;
   lastModified?: string;
-  author?: string;
+  author?: string; // owner — email of the user who created the article (gates edit rights for the author role)
   assignedTo?: string[]; // emails of contributors the tech writer has shared this article with
   reviewsDone?: string[]; // emails of reviewers who have marked their review complete
   assignedBy?: string; // email of the tech writer who initiated the share (used for review-done notifications)
@@ -105,7 +105,7 @@ export interface Snippet {
 
 // ── Users & Roles ──
 
-export type UserRole = "tech-writer" | "contributor";
+export type UserRole = "tech-writer" | "author" | "contributor";
 
 export interface User {
   email: string;
