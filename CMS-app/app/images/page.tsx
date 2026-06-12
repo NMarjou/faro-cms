@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { canManageImages, canDeleteImage } from "@/lib/permissions";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
@@ -14,6 +15,8 @@ interface ImageInfo {
   name: string;
   file: string;
   folder: string;
+  owner?: string;
+  uploadedAt?: string;
 }
 
 interface ImagesData {
@@ -22,7 +25,7 @@ interface ImagesData {
 }
 
 export default function ImagesPage() {
-  const { role, loaded } = useCurrentUser();
+  const { user, role, loaded } = useCurrentUser();
   const [data, setData] = useState<ImagesData>({ folders: [], images: [] });
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -91,6 +94,7 @@ export default function ImagesPage() {
         const formData = new FormData();
         formData.append("file", file);
         if (currentFolder) formData.append("folder", currentFolder);
+        if (user?.email) formData.append("owner", user.email);
         await fetch("/api/upload", { method: "POST", body: formData });
       }
       loadImages();
@@ -193,11 +197,21 @@ export default function ImagesPage() {
           <img src={`/api/content?path=${encodeURIComponent(image.file)}&raw=1`} alt={image.name} className="tree-image-thumb"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           <span className="tree-label">{image.name}</span>
-          <span style={{ fontSize: 11, color: "var(--fg-muted)", fontFamily: "var(--font-mono)", marginLeft: "auto" }}>{image.file.split("/").pop()}</span>
+          {image.owner && (
+            <span
+              style={{ fontSize: 11, color: "var(--fg-muted)", marginLeft: "auto" }}
+              title={`Uploaded by ${image.owner}${image.uploadedAt ? ` on ${image.uploadedAt}` : ""}`}
+            >
+              {image.owner.split("@")[0]}
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: "var(--fg-muted)", fontFamily: "var(--font-mono)", marginLeft: image.owner ? 8 : "auto" }}>{image.file.split("/").pop()}</span>
         </div>
-        <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete image" disabled={deleting === image.file} onClick={() => deleteImage(image)}>
-          {deleting === image.file ? "..." : "\u00d7"}
-        </button>
+        {canDeleteImage(role, image, user?.email) && (
+          <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete image" disabled={deleting === image.file} onClick={() => deleteImage(image)}>
+            {deleting === image.file ? "..." : "\u00d7"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -249,7 +263,7 @@ export default function ImagesPage() {
   const rootImages = getImagesInFolder(currentFolder);
   const isInSubfolder = currentFolder !== "";
 
-  if (loaded && role === "contributor") {
+  if (loaded && !canManageImages(role)) {
     return <TechWriterBlocked title="Images" />;
   }
 
@@ -311,6 +325,11 @@ export default function ImagesPage() {
             </div>
             <div className="image-viewer-footer">
               <span style={{ fontSize: 12, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>{viewing.file}</span>
+              <span style={{ fontSize: 12, color: "var(--fg-muted)" }}>
+                {viewing.owner
+                  ? `Owner: ${viewing.owner}${viewing.uploadedAt ? ` · ${viewing.uploadedAt}` : ""}`
+                  : "Owner: unknown"}
+              </span>
               <button className="btn btn-sm" onClick={() => { copyPath(viewing); }}>
                 {copied === viewing.file ? "Copied!" : "Copy Path"}
               </button>

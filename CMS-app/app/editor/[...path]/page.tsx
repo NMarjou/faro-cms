@@ -302,11 +302,14 @@ export default function EditorPage() {
         throw new Error(data.error || "Save failed");
       }
 
-      // Update lastModified in TOC. Saving body content after a sign-off
-      // also clears the sign-off — the article has effectively changed
-      // since the tech writer approved it, so it must be re-signed before
-      // publish. Reset the local articleMeta to match.
+      // Update lastModified in TOC. Saving body content invalidates two kinds
+      // of prior approval, because the article has effectively changed since:
+      //   • the tech writer's sign-off (reviewComplete) — must be re-signed
+      //   • an author's submit-for-approval (approvalStatus) when the owner
+      //     edits — must be re-submitted
+      // Clear whichever applies in the same TOC write and mirror locally.
       let clearedSignoff = false;
+      let clearedApproval = false;
       if (articleMeta) {
         const tocRes = await fetch("/api/toc");
         if (tocRes.ok) {
@@ -320,35 +323,40 @@ export default function EditorPage() {
               delete art.reviewCompletedAt;
               clearedSignoff = true;
             }
+            if (isOwner && art.approvalStatus === "submitted") {
+              delete art.approvalStatus;
+              delete art.submittedBy;
+              delete art.submittedAt;
+              clearedApproval = true;
+            }
             await fetch("/api/toc", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ toc }),
             });
-            if (clearedApproval) {
-              setArticleMeta((p) =>
-                p
-                  ? {
-                      ...p,
-                      approvalStatus: undefined,
-                      submittedBy: undefined,
-                      submittedAt: undefined,
-                    }
-                  : p
-              );
-            }
           }
         }
       }
 
-      if (clearedSignoff) {
+      if (clearedSignoff || clearedApproval) {
         setArticleMeta((p) =>
           p
             ? {
                 ...p,
-                reviewComplete: undefined,
-                reviewCompletedBy: undefined,
-                reviewCompletedAt: undefined,
+                ...(clearedSignoff
+                  ? {
+                      reviewComplete: undefined,
+                      reviewCompletedBy: undefined,
+                      reviewCompletedAt: undefined,
+                    }
+                  : {}),
+                ...(clearedApproval
+                  ? {
+                      approvalStatus: undefined,
+                      submittedBy: undefined,
+                      submittedAt: undefined,
+                    }
+                  : {}),
               }
             : p
         );
@@ -785,26 +793,51 @@ export default function EditorPage() {
           )}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            onClick={() => setShowMeta((p) => !p)}
-            className={`btn btn-sm${showMeta ? " btn-primary" : ""}`}
-            title="Article metadata"
-          >
-            Meta
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !isDirty}
-            className="btn btn-icon"
-            aria-label={saving ? "Saving" : "Save"}
-            title={saving ? "Saving…" : isDirty ? "Save (Cmd/Ctrl+S)" : "No unsaved changes"}
-            style={{
-              opacity: saving || !isDirty ? 0.5 : 1,
-              borderColor: isDirty ? "var(--accent)" : undefined,
-            }}
-          >
-            <Icon name="floppy-disk" size={16} />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setShowMeta((p) => !p)}
+              className={`btn btn-sm${showMeta ? " btn-primary" : ""}`}
+              title="Article metadata"
+            >
+              Meta
+            </button>
+          )}
+          {canEdit && (
+            <button
+              onClick={handleSave}
+              disabled={saving || !isDirty}
+              className="btn btn-icon"
+              aria-label={saving ? "Saving" : "Save"}
+              title={saving ? "Saving…" : isDirty ? "Save (Cmd/Ctrl+S)" : "No unsaved changes"}
+              style={{
+                opacity: saving || !isDirty ? 0.5 : 1,
+                borderColor: isDirty ? "var(--accent)" : undefined,
+              }}
+            >
+              <Icon name="floppy-disk" size={16} />
+            </button>
+          )}
+          {/* Author submits an owned article for tech-writer sign-off; once
+              submitted, show a disabled indicator in place of the button. */}
+          {showSubmitForApproval && (
+            <button
+              onClick={handleSubmitForApproval}
+              className="btn btn-gold"
+              title="Submit this article for a tech writer to review and publish"
+            >
+              Submit for approval
+            </button>
+          )}
+          {!isSnippet && role === "author" && isOwner && isSubmitted && (
+            <button
+              className="btn btn-sm"
+              disabled
+              title="Awaiting tech-writer sign-off"
+              style={{ opacity: 0.6 }}
+            >
+              Submitted
+            </button>
+          )}
           {/* Hide Send for Review once the article is signed off AND there
               are no unsaved edits — a clean sign-off state means no new
               changes need contributor input. The moment the tech writer
@@ -812,7 +845,7 @@ export default function EditorPage() {
               can request a new review round if the changes warrant it. */}
           {!isSnippet &&
             articleMeta &&
-            !isContributor &&
+            isTechWriter(role) &&
             !(articleMeta.reviewComplete && !isDirty) && (
               <button
                 onClick={() => setShowReviewDrawer(true)}
@@ -830,7 +863,7 @@ export default function EditorPage() {
               styling so "complete this review round" reads consistently. */}
           {!isSnippet &&
             articleMeta &&
-            !isContributor &&
+            isTechWriter(role) &&
             articleMeta.assignedTo &&
             articleMeta.assignedTo.length > 0 &&
             (articleMeta.reviewComplete ? (
@@ -852,7 +885,7 @@ export default function EditorPage() {
                 Sign off
               </button>
             ))}
-          {!isContributor && (
+          {canPublish(role) && (
             <button onClick={handlePublish} className="btn btn-primary">Publish</button>
           )}
         </div>
@@ -867,9 +900,10 @@ export default function EditorPage() {
         />
       )}
       <div className="main-body article-editor">
-        {/* Contributor-facing banner: surfaces the tech writer's sign-off
-            so contributors understand why Suggest Changes disappeared. */}
-        {!isSnippet && isContributor && articleMeta?.reviewComplete && (
+        {/* Reviewer-facing banner: surfaces the tech writer's sign-off so
+            non-editors (contributors, and authors on articles they don't own)
+            understand why Suggest Changes disappeared. */}
+        {!isSnippet && !canEdit && articleMeta?.reviewComplete && (
           <div
             style={{
               background: "var(--success-light, var(--info-light))",
