@@ -9,7 +9,7 @@ import { useTheme } from "./ThemeProvider";
 import FaroLogo from "./FaroLogo";
 import Icon from "./Icon";
 import { useCurrentUser } from "./CurrentUserProvider";
-import { isTechWriter } from "@/lib/permissions";
+import { isTechWriter, canManageImages } from "@/lib/permissions";
 
 type CreatingAt =
   | null
@@ -28,6 +28,9 @@ export default function SidebarTree() {
   // Articles page, not the nav. Unknown/unloaded role → not a tech writer, so
   // the limited shell renders during the brief load rather than flashing tools.
   const techWriter = isTechWriter(role);
+  // Images are available to authors too — they add images to articles they
+  // write. Everything else under "tools" stays tech-writer only.
+  const manageImages = canManageImages(role);
 
   // Review-queue badge — tech writers see a count of items needing their
   // attention across all articles (pending suggestions + awaiting sign-off).
@@ -484,10 +487,10 @@ export default function SidebarTree() {
         <nav style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, marginTop: 8, flex: 1, overflow: "hidden auto", width: "100%" }}>
           {navItem("/", "squares-four", "Dashboard", pathname === "/")}
           {navItem("/articles", "file-text", "Articles", articlesActive)}
+          {techWriter && navItem("/snippets", "scissors", "Snippets", pathname === "/snippets")}
+          {manageImages && navItem("/images", "image-square", "Images", pathname === "/images")}
           {techWriter && (
             <>
-              {navItem("/snippets", "scissors", "Snippets", pathname === "/snippets")}
-              {navItem("/images", "image-square", "Images", pathname === "/images")}
               {navItem("/variables", "brackets-curly", "Variables", pathname === "/variables")}
               {navItem("/toc", "list", "TOCs", pathname === "/toc")}
             </>
@@ -618,7 +621,7 @@ export default function SidebarTree() {
           )}
         </div>
 
-        {/* Snippets / Images / Variables / TOCs — tech writer only */}
+        {/* Snippets — tech writer only */}
         {techWriter && (
         <>
 
@@ -654,8 +657,11 @@ export default function SidebarTree() {
             </div>
           )}
         </div>
+        </>
+        )}
 
-        {/* Images — expandable tree */}
+        {/* Images — expandable tree (tech writers + authors) */}
+        {manageImages && (
         <div className="tree-node">
           <div className="tree-branch-row">
             <Link href="/images" className={`tree-nav-link${pathname === "/images" ? " active" : ""}`} style={{ flex: 1 }}>
@@ -687,7 +693,11 @@ export default function SidebarTree() {
             </div>
           )}
         </div>
+        )}
 
+        {/* Variables / TOCs — tech writer only */}
+        {techWriter && (
+        <>
         {/* Variables — expandable tree */}
         <div className="tree-node">
           <div className="tree-branch-row">

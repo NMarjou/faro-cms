@@ -21,6 +21,35 @@ export function canCreateArticles(role: UserRole | null): boolean {
   return role === "tech-writer" || role === "author";
 }
 
+/**
+ * Can use the Images section — upload and organize images. Authors need this
+ * to add images to the articles they write. Contributors cannot (they review,
+ * they don't author content). Images are a shared resource, not owned.
+ */
+export function canManageImages(role: UserRole | null): boolean {
+  return role === "tech-writer" || role === "author";
+}
+
+/**
+ * Can delete a specific image. Tech writers can delete any image; authors can
+ * delete only images they uploaded (own). `image.owner` is the uploader email.
+ */
+export function canDeleteImage(
+  role: UserRole | null,
+  image: { owner?: string } | null | undefined,
+  email: string | null | undefined
+): boolean {
+  if (role === "tech-writer") return true;
+  if (role === "author") {
+    return (
+      !!image?.owner &&
+      !!email &&
+      image.owner.toLowerCase() === email.toLowerCase()
+    );
+  }
+  return false;
+}
+
 /** Can publish content (open the publish PR). Authors must instead submit for sign-off. */
 export function canPublish(role: UserRole | null): boolean {
   return role === "tech-writer";

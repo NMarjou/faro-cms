@@ -18,7 +18,9 @@ import type { TocArticle } from "./types";
 
 export type ArticleStatus = "draft" | "in-review" | "signed-off" | "published";
 
-export function deriveArticleStatus(article: TocArticle): ArticleStatus {
+export function deriveArticleStatus(
+  article: Pick<TocArticle, "published" | "reviewComplete" | "assignedTo">
+): ArticleStatus {
   // Published wins — once an article has shipped, that's the most
   // informative state regardless of any subsequent review activity. If
   // someone reopens the review (sends it for review again), the publish

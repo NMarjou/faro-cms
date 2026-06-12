@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 import { putFile } from "@/lib/storage";
+import { setImageOwner } from "@/lib/image-meta";
 
 const CONTENT_ROOT = path.resolve(process.cwd(), "..", "CMS-content");
 const isLocal = !process.env.GITHUB_TOKEN;
@@ -11,6 +12,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const folder = (formData.get("folder") as string) || "";
+    const owner = (formData.get("owner") as string) || "";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -38,6 +40,20 @@ export async function POST(request: NextRequest) {
         buffer.toString("base64"),
         `Upload image: ${safeName}`
       );
+    }
+
+    // Record who uploaded it so the Images list can show ownership. Keyed by
+    // the same relative path the listing uses. Best-effort — a metadata write
+    // failure shouldn't fail the upload itself.
+    if (owner) {
+      try {
+        await setImageOwner(filePath, {
+          owner,
+          uploadedAt: new Date().toISOString().split("T")[0],
+        });
+      } catch (err) {
+        console.warn(`[upload] failed to record owner for ${filePath}:`, err);
+      }
     }
 
     return NextResponse.json({ path: `/${filePath}`, file: filePath });

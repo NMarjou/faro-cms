@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listFilesRecursive, getFile, putFile } from "@/lib/storage";
+import { loadImageMeta } from "@/lib/image-meta";
 
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"];
 
@@ -16,7 +17,14 @@ async function loadOrder(folder: string): Promise<string[]> {
 export async function GET() {
   try {
     const files = await listFilesRecursive("content/images");
-    const images: { name: string; file: string; folder: string }[] = [];
+    const meta = await loadImageMeta();
+    const images: {
+      name: string;
+      file: string;
+      folder: string;
+      owner?: string;
+      uploadedAt?: string;
+    }[] = [];
     const folderSet = new Set<string>();
 
     for (const filePath of files) {
@@ -35,7 +43,14 @@ export async function GET() {
       if (!IMAGE_EXTENSIONS.includes(ext)) continue;
 
       const name = filePath.split("/").pop() || filePath;
-      images.push({ name, file: relPath, folder });
+      const m = meta[relPath];
+      images.push({
+        name,
+        file: relPath,
+        folder,
+        owner: m?.owner,
+        uploadedAt: m?.uploadedAt,
+      });
     }
 
     // Apply per-folder ordering

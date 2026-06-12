@@ -33,6 +33,13 @@ export interface TocArticle {
    */
   published?: boolean;
   publishedAt?: string; // ISO timestamp of the merge that published it
+  // ── Author submit-for-approval ──
+  // An author submits an owned article to request tech-writer sign-off.
+  // `reviewComplete` above is the sign-off itself; this flags that an author
+  // is waiting on it. Cleared when the owner edits the body or when published.
+  approvalStatus?: "submitted";
+  submittedBy?: string; // email of the author who submitted it for approval
+  submittedAt?: string; // ISO date the article was submitted
 }
 
 export interface TocSection {
@@ -93,6 +100,18 @@ export interface VariableSetsData {
 export interface ConditionsConfig {
   tags: string[];
   colors?: Record<string, string>;
+}
+
+// ── Images ──
+
+/** Per-image metadata, keyed by the image's relative path (e.g. "images/foo/bar.png"). */
+export interface ImageMeta {
+  owner: string; // email of the user who uploaded the image
+  uploadedAt: string; // ISO date the image was uploaded
+}
+
+export interface ImageMetadataMap {
+  [file: string]: ImageMeta;
 }
 
 // ── Snippets ──

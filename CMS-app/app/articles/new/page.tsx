@@ -7,7 +7,7 @@ import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 export default function NewArticlePage() {
   const router = useRouter();
-  const { role, loaded } = useCurrentUser();
+  const { user, role, loaded } = useCurrentUser();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
