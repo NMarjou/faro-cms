@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { signOut } from "next-auth/react";
 import { useTheme } from "@/components/ThemeProvider";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import Icon from "@/components/Icon";
@@ -33,10 +34,11 @@ export default function UserSettingsPage() {
   const [editorFont, setEditorFont] = useState("source-sans");
   const [message, setMessage] = useState<string | null>(null);
 
-  // Identity — stand-in for "currently logged in user" until auth is wired.
-  // CurrentUserProvider owns persistence + cross-tab sync; we mirror its
-  // value into local state so the <select> stays controlled.
-  const { setIdentity } = useCurrentUser();
+  // Identity. Under OAuth (`authConfigured`) this is the real session and is
+  // read-only here (shown with a Sign out button). In dev it's a switchable
+  // stand-in; CurrentUserProvider owns persistence + cross-tab sync and we
+  // mirror its value into local state so the <select> stays controlled.
+  const { setIdentity, authConfigured, user: currentUser } = useCurrentUser();
   const [identity, setIdentityState] = useState<string>(DEFAULT_IDENTITY);
   const [users, setUsers] = useState<User[]>([]);
 
@@ -101,28 +103,48 @@ export default function UserSettingsPage() {
         <h1>User Settings</h1>
       </header>
       <div className="main-body">
-        {/* Identity — dev stand-in for "currently logged in user" */}
+        {/* Identity */}
         <div className="card" style={{ maxWidth: 600, marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, marginBottom: 4 }}>Identity</h2>
-          <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 12 }}>
-            Stand-in for &ldquo;currently logged in user&rdquo; during the dev phase.
-            Used as the sender on review requests. Replaced by real auth later.
-          </p>
-          <select
-            className="input"
-            value={identity}
-            onChange={(e) => handleIdentityChange(e.target.value)}
-            style={{ width: "100%", maxWidth: 360, fontSize: 14 }}
-          >
-            {users.length === 0 && (
-              <option value={DEFAULT_IDENTITY}>{DEFAULT_IDENTITY}</option>
-            )}
-            {users.map((u) => (
-              <option key={u.email} value={u.email}>
-                {u.name ? `${u.name} — ${u.email}` : u.email} · {u.role}
-              </option>
-            ))}
-          </select>
+          {authConfigured ? (
+            <>
+              <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 12 }}>
+                Signed in via GitHub.
+              </p>
+              <p style={{ fontSize: 14, marginBottom: 12 }}>
+                {currentUser?.name ? `${currentUser.name} — ` : ""}
+                {currentUser?.email}
+                {currentUser?.role ? ` · ${currentUser.role}` : ""}
+              </p>
+              <button className="btn btn-sm" onClick={() => signOut()}>
+                <Icon name="sign-out" size={14} />
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 12 }}>
+                Stand-in for &ldquo;currently logged in user&rdquo; during the dev phase.
+                Used as the sender on review requests. Replaced by GitHub sign-in once
+                OAuth is configured.
+              </p>
+              <select
+                className="input"
+                value={identity}
+                onChange={(e) => handleIdentityChange(e.target.value)}
+                style={{ width: "100%", maxWidth: 360, fontSize: 14 }}
+              >
+                {users.length === 0 && (
+                  <option value={DEFAULT_IDENTITY}>{DEFAULT_IDENTITY}</option>
+                )}
+                {users.map((u) => (
+                  <option key={u.email} value={u.email}>
+                    {u.name ? `${u.name} — ${u.email}` : u.email} · {u.role}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         <div className="card" style={{ maxWidth: 600 }}>

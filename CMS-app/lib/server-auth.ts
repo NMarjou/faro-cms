@@ -15,6 +15,8 @@
  */
 
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions, isAuthConfigured } from "./auth-options";
 import { getFile } from "./storage";
 import {
   DEFAULT_USERS,
@@ -53,23 +55,36 @@ export async function loadUsers(): Promise<User[]> {
 }
 
 /**
- * Resolve the calling user from the request. Reads the `x-cms-user` header and
- * matches it (case-insensitively) against the user list. Returns null when the
- * header is absent or the email isn't a known user — callers treat null as
- * "deny" for any privileged action.
+ * Resolve the calling user from the request, then match their email
+ * (case-insensitively) against the user list. Returns null when there's no
+ * identity or the email isn't a known user — callers treat null as "deny" for
+ * any privileged action.
  *
- * THIS IS THE AUTH SEAM. Swap the header read for a NextAuth session lookup
- * here when real auth lands; nothing else needs to change.
+ * THIS IS THE AUTH SEAM. Two modes:
+ *   - OAuth configured  → identity comes from the authenticated NextAuth
+ *     session cookie. The `x-cms-user` header is ignored, so it can't be
+ *     spoofed; this is the real security boundary.
+ *   - OAuth not configured (dev) → identity comes from the `x-cms-user`
+ *     header set by the client fetch interceptor. Spoofable, dev-only.
  */
 export async function getRequestUser(
   request: Request
 ): Promise<User | null> {
-  const email = request.headers.get(IDENTITY_HEADER);
+  const email = await resolveIdentityEmail(request);
   if (!email) return null;
   const users = await loadUsers();
   return (
     users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null
   );
+}
+
+/** The email of the calling user, or null. Session when OAuth is on, header otherwise. */
+async function resolveIdentityEmail(request: Request): Promise<string | null> {
+  if (isAuthConfigured()) {
+    const session = await getServerSession(authOptions);
+    return session?.user?.email ?? null;
+  }
+  return request.headers.get(IDENTITY_HEADER);
 }
 
 /** Walk the TOC (categories → sections → subsections, plus standalone) for a file. */
