@@ -1,77 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
-import {
-  DEFAULT_USERS,
-  type Toc,
-  type TocArticle,
-  type User,
-  type UsersData,
-} from "@/lib/types";
+import { type Toc } from "@/lib/types";
 import { notifyArticleSubmittedForApproval } from "@/lib/notifications";
-
-const USERS_PATH = "content/users.json";
-
-function findArticle(toc: Toc, file: string): TocArticle | null {
-  for (const cat of toc.categories) {
-    for (const sec of cat.sections) {
-      const direct = sec.articles.find((a) => a.file === file);
-      if (direct) return direct;
-      if (sec.subsections) {
-        for (const sub of sec.subsections) {
-          const nested = sub.articles.find((a) => a.file === file);
-          if (nested) return nested;
-        }
-      }
-    }
-  }
-  return toc.articles?.find((a) => a.file === file) || null;
-}
-
-async function loadUsers(): Promise<User[]> {
-  try {
-    const file = await getFile(USERS_PATH);
-    const data = JSON.parse(file.content) as UsersData;
-    return data.users || DEFAULT_USERS;
-  } catch {
-    return DEFAULT_USERS;
-  }
-}
+import {
+  getRequestUser,
+  loadUsers,
+  findTocArticle,
+  forbidden,
+} from "@/lib/server-auth";
+import { canSubmitForApproval } from "@/lib/permissions";
 
 /**
  * POST /api/article/submit-approval
- * Body: { path: string, submittedBy: string }
+ * Body: { path: string }
  *
  * Marks an author's article as awaiting tech-writer sign-off (sets
  * `approvalStatus: "submitted"` in the TOC) and notifies all tech writers.
  * Publishing the article is the sign-off; editing it clears the status.
+ * Only the article's owning author may submit it — the submitter is taken
+ * from the authenticated identity, not the request body.
  */
 export async function POST(request: NextRequest) {
+  const caller = await getRequestUser(request);
   try {
     const body = await request.json();
-    const { path, submittedBy } = body as {
-      path?: string;
-      submittedBy?: string;
-    };
+    const { path } = body as { path?: string };
 
     if (!path || typeof path !== "string") {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
-    if (!submittedBy || typeof submittedBy !== "string") {
-      return NextResponse.json(
-        { error: "submittedBy is required" },
-        { status: 400 }
-      );
-    }
 
     const tocFile = await getFile("content/toc.json");
     const toc = JSON.parse(tocFile.content) as Toc;
-    const article = findArticle(toc, path);
+    const article = findTocArticle(toc, path);
     if (!article) {
       return NextResponse.json(
         { error: "Article not found in TOC" },
         { status: 404 }
       );
     }
+
+    // Only the owning author may submit their own article for sign-off.
+    if (!canSubmitForApproval(caller?.role ?? null, article, caller?.email)) {
+      return forbidden();
+    }
+    const submittedBy = caller!.email;
 
     article.approvalStatus = "submitted";
     article.submittedBy = submittedBy;

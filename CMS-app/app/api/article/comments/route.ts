@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
 
 /**
  * GET  /api/article/comments?path=<articleFile>
@@ -35,6 +36,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  // Comments are a review activity shared by all roles (the editor
+  // auto-persists them for any user who opens an article). Require a known
+  // signed-in user, but don't restrict by role.
+  const caller = await getRequestUser(request);
+  if (!caller) return forbidden();
   try {
     const body = await request.json();
     const { path, comments, message } = body as {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedFile, putFile } from "@/lib/storage";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 import type { Glossary } from "@/lib/types";
 
 const CACHE_HEADERS = {
@@ -21,6 +23,8 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { glossary } = body;

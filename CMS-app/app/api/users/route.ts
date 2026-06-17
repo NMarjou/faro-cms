@@ -2,19 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
 import { DEFAULT_USERS, type User, type UsersData } from "@/lib/types";
 import { notifyContributorInvited } from "@/lib/notifications";
+import { getRequestUser, loadUsers, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 
 const USERS_PATH = "content/users.json";
-
-/** Read the existing users.json (or fall back to defaults) without throwing. */
-async function loadExistingUsers(): Promise<User[]> {
-  try {
-    const file = await getFile(USERS_PATH);
-    const data = JSON.parse(file.content) as UsersData;
-    return data.users || DEFAULT_USERS;
-  } catch {
-    return DEFAULT_USERS;
-  }
-}
 
 /**
  * GET /api/users
@@ -43,6 +34,8 @@ export async function GET() {
  * array on every change — small enough that diffing isn't worth it.
  */
 export async function PUT(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     if (!body || !Array.isArray(body.users)) {
@@ -75,7 +68,7 @@ export async function PUT(request: NextRequest) {
     // Diff against the previous list to detect newly-added contributors and
     // authors so we can fire welcome notifications for them. Email is the
     // unique key.
-    const previous = await loadExistingUsers();
+    const previous = await loadUsers();
     const previousEmails = new Set(previous.map((u) => u.email.toLowerCase()));
     const newContributors = (body.users as User[]).filter(
       (u) =>

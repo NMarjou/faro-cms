@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
 import { resetSpellChecker } from "@/lib/spell-checker";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 
 const DICT_PATH = "content/custom-dictionary.json";
 
@@ -26,6 +28,8 @@ export async function GET() {
 
 /** POST — add words to the custom dictionary */
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { words } = body as { words: string[] };
@@ -64,6 +68,8 @@ export async function POST(request: NextRequest) {
 
 /** DELETE — remove words from the custom dictionary */
 export async function DELETE(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { words } = body as { words: string[] };

@@ -1,0 +1,168 @@
+/**
+ * Server-side authorization layer.
+ *
+ * The role helpers in `lib/permissions.ts` gate the UI; this module re-checks
+ * the same rules on the server so the API stops trusting the client.
+ *
+ * ── Honest caveat ────────────────────────────────────────────────────────────
+ * There is no real authentication yet. Identity arrives in the `x-cms-user`
+ * request header, sourced from the browser's localStorage by the global fetch
+ * interceptor in `CurrentUserProvider`. That header is trivially spoofable
+ * (any curl can set it), so this is defense-in-depth + centralization, NOT a
+ * true security boundary. When NextAuth lands, `getRequestUser()` is the single
+ * seam that changes — from "read header" to "read session"; every route guard
+ * below keeps working unchanged.
+ */
+
+import { NextResponse } from "next/server";
+import { getFile } from "./storage";
+import {
+  DEFAULT_USERS,
+  type Toc,
+  type TocArticle,
+  type User,
+  type UsersData,
+} from "./types";
+import {
+  isTechWriter,
+  canManageImages,
+  canCreateArticles,
+  canEditArticle,
+} from "./permissions";
+
+/** Header the client fetch interceptor sets to the active user's email. */
+export const IDENTITY_HEADER = "x-cms-user";
+
+const USERS_PATH = "content/users.json";
+const TOC_PATH = "content/toc.json";
+
+/**
+ * Load the user list from content. The single source of truth — replaces the
+ * `loadUsers()`/`loadExistingUsers()` copies that used to live in each route.
+ * Falls back to the seed list if the file is missing or unreadable (mirrors
+ * the behaviour of `/api/users`).
+ */
+export async function loadUsers(): Promise<User[]> {
+  try {
+    const file = await getFile(USERS_PATH);
+    const data = JSON.parse(file.content) as UsersData;
+    return data.users || DEFAULT_USERS;
+  } catch {
+    return DEFAULT_USERS;
+  }
+}
+
+/**
+ * Resolve the calling user from the request. Reads the `x-cms-user` header and
+ * matches it (case-insensitively) against the user list. Returns null when the
+ * header is absent or the email isn't a known user — callers treat null as
+ * "deny" for any privileged action.
+ *
+ * THIS IS THE AUTH SEAM. Swap the header read for a NextAuth session lookup
+ * here when real auth lands; nothing else needs to change.
+ */
+export async function getRequestUser(
+  request: Request
+): Promise<User | null> {
+  const email = request.headers.get(IDENTITY_HEADER);
+  if (!email) return null;
+  const users = await loadUsers();
+  return (
+    users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null
+  );
+}
+
+/** Walk the TOC (categories → sections → subsections, plus standalone) for a file. */
+export function findTocArticle(toc: Toc, file: string): TocArticle | null {
+  for (const cat of toc.categories) {
+    for (const sec of cat.sections) {
+      const direct = sec.articles.find((a) => a.file === file);
+      if (direct) return direct;
+      if (sec.subsections) {
+        for (const sub of sec.subsections) {
+          const nested = sub.articles.find((a) => a.file === file);
+          if (nested) return nested;
+        }
+      }
+    }
+  }
+  return toc.articles?.find((a) => a.file === file) || null;
+}
+
+/** Load + parse the TOC; null on any failure (callers default-deny). */
+export async function loadToc(): Promise<Toc | null> {
+  try {
+    const file = await getFile(TOC_PATH);
+    return JSON.parse(file.content) as Toc;
+  } catch {
+    return null;
+  }
+}
+
+// ── Guard responses ────────────────────────────────────────────────────────
+
+/** 401 — no identity at all (missing/unknown `x-cms-user`). */
+export function unauthorized(): NextResponse {
+  return NextResponse.json(
+    { error: "Not signed in" },
+    { status: 401 }
+  );
+}
+
+/** 403 — known user, but their role doesn't permit the action. */
+export function forbidden(message = "You don't have permission to do that"): NextResponse {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
+
+// ── /api/content path classification ─────────────────────────────────────────
+
+/** Platform config files only a tech writer may write. */
+const TECH_WRITER_FILES = new Set([
+  "toc.json",
+  "users.json",
+  "variables.json",
+  "glossary.json",
+  "conditions.json",
+  "styles.json",
+  "editor-styles.css",
+  "dictionary.json",
+]);
+
+/**
+ * Authorize a write to `/api/content` by inspecting the target `path`. The
+ * generic content endpoint can target many content types, each with its own
+ * rule:
+ *   - platform config + snippets → tech-writer
+ *   - images/**                  → canManageImages (tech-writer or author)
+ *   - article files              → canEditArticle (owner-aware) if it exists
+ *                                  in the TOC, else canCreateArticles (new file)
+ *
+ * `path` is the content-relative path the route receives (no "content/" prefix),
+ * e.g. "help/passport/overview.mdx", "toc.json", "images/foo.png".
+ */
+export async function canWriteContentPath(
+  path: string,
+  user: User | null
+): Promise<boolean> {
+  if (!user) return false;
+  const role = user.role;
+
+  // Normalize: tolerate a leading "content/" if a caller ever includes it.
+  const p = path.replace(/^content\//, "");
+
+  if (TECH_WRITER_FILES.has(p) || p.startsWith("snippets/")) {
+    return isTechWriter(role);
+  }
+  if (p.startsWith("images/")) {
+    return canManageImages(role);
+  }
+
+  // Otherwise treat it as an article body. Resolve ownership from the TOC.
+  const toc = await loadToc();
+  const article = toc ? findTocArticle(toc, p) : null;
+  if (article) {
+    return canEditArticle(role, article, user.email);
+  }
+  // Not in the TOC → a brand-new article file being created.
+  return canCreateArticles(role);
+}

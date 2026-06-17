@@ -1,41 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
-import {
-  DEFAULT_USERS,
-  type Toc,
-  type TocArticle,
-  type User,
-  type UsersData,
-} from "@/lib/types";
+import { type Toc } from "@/lib/types";
 import { notifyArticleSharedForReview } from "@/lib/notifications";
-
-const USERS_PATH = "content/users.json";
-
-function findArticle(toc: Toc, file: string): TocArticle | null {
-  for (const cat of toc.categories) {
-    for (const sec of cat.sections) {
-      const direct = sec.articles.find((a) => a.file === file);
-      if (direct) return direct;
-      if (sec.subsections) {
-        for (const sub of sec.subsections) {
-          const nested = sub.articles.find((a) => a.file === file);
-          if (nested) return nested;
-        }
-      }
-    }
-  }
-  return toc.articles?.find((a) => a.file === file) || null;
-}
-
-async function loadUsers(): Promise<User[]> {
-  try {
-    const file = await getFile(USERS_PATH);
-    const data = JSON.parse(file.content) as UsersData;
-    return data.users || DEFAULT_USERS;
-  } catch {
-    return DEFAULT_USERS;
-  }
-}
+import {
+  getRequestUser,
+  loadUsers,
+  findTocArticle,
+  forbidden,
+} from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 
 /**
  * POST /api/article/share
@@ -51,6 +24,8 @@ async function loadUsers(): Promise<User[]> {
  * we treat removals as quiet to avoid mailbox noise during iteration.
  */
 export async function POST(request: NextRequest) {
+  const caller = await getRequestUser(request);
+  if (!isTechWriter(caller?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { path, emails, senderEmail } = body as {
@@ -69,7 +44,7 @@ export async function POST(request: NextRequest) {
     // Load TOC + locate the article entry.
     const tocFile = await getFile("content/toc.json");
     const toc = JSON.parse(tocFile.content) as Toc;
-    const article = findArticle(toc, path);
+    const article = findTocArticle(toc, path);
     if (!article) {
       return NextResponse.json({ error: "Article not found in TOC" }, { status: 404 });
     }

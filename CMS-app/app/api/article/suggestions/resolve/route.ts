@@ -1,41 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
 import {
-  DEFAULT_USERS,
   type Suggestion,
   type SuggestionsData,
   type Toc,
-  type TocArticle,
-  type User,
-  type UsersData,
 } from "@/lib/types";
 import { notifySuggestionResolved } from "@/lib/notifications";
-
-async function loadUsers(): Promise<User[]> {
-  try {
-    const file = await getFile("content/users.json");
-    const data = JSON.parse(file.content) as UsersData;
-    return data.users || DEFAULT_USERS;
-  } catch {
-    return DEFAULT_USERS;
-  }
-}
-
-function findArticle(toc: Toc, file: string): TocArticle | null {
-  for (const cat of toc.categories || []) {
-    for (const sec of cat.sections || []) {
-      const direct = sec.articles.find((a) => a.file === file);
-      if (direct) return direct;
-      if (sec.subsections) {
-        for (const sub of sec.subsections) {
-          const nested = sub.articles.find((a) => a.file === file);
-          if (nested) return nested;
-        }
-      }
-    }
-  }
-  return toc.articles?.find((a) => a.file === file) || null;
-}
+import {
+  getRequestUser,
+  loadUsers,
+  findTocArticle,
+  forbidden,
+} from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 
 /**
  * POST /api/article/suggestions/resolve
@@ -84,6 +61,8 @@ function replaceNthOccurrence(
 }
 
 export async function POST(request: NextRequest) {
+  const caller = await getRequestUser(request);
+  if (!isTechWriter(caller?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { path, id, action, resolverEmail } = body as {
@@ -171,7 +150,7 @@ export async function POST(request: NextRequest) {
         try {
           const tocFile = await getFile("content/toc.json");
           const toc = JSON.parse(tocFile.content) as Toc;
-          const art = findArticle(toc, path);
+          const art = findTocArticle(toc, path);
           if (art) articleTitle = art.title;
         } catch {
           /* fall through with the path as title */

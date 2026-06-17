@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listFilesRecursive, getFile, putFile, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
 import { memoize } from "@/lib/cache";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 import matter from "gray-matter";
 
 type SnippetEntry = { name: string; file: string; folder: string };
@@ -117,6 +119,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { folder, order } = body as { folder: string; order: string[] };

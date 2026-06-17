@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listFilesRecursive, getFile, putFile } from "@/lib/storage";
 import { loadImageMeta } from "@/lib/image-meta";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { canManageImages } from "@/lib/permissions";
 
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"];
 
@@ -73,6 +75,8 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!canManageImages(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { folder, order } = body as { folder: string; order: string[] };

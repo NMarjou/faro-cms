@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, getCachedFile, putFile, deleteFile } from "@/lib/storage";
+import { getRequestUser, canWriteContentPath, forbidden } from "@/lib/server-auth";
 
 // Small metadata files the editor reads on every article open. Caching
 // these via getCachedFile means hundreds of editor opens share one read;
@@ -68,6 +69,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const user = await getRequestUser(request);
+    if (!(await canWriteContentPath(path, user))) return forbidden();
+
     const result = await putFile(`content/${path}`, content, message, branch, sha);
     return NextResponse.json(result);
   } catch (error) {
@@ -87,6 +91,9 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const user = await getRequestUser(request);
+    if (!(await canWriteContentPath(path, user))) return forbidden();
 
     await deleteFile(`content/${path}`, message, branch);
     return NextResponse.json({ success: true });

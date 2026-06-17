@@ -34,7 +34,56 @@ const Ctx = createContext<CurrentUserCtx>({
 export const IDENTITY_STORAGE_KEY = "cms-current-user";
 export const IDENTITY_EVENT = "cms-identity-changed";
 
+/** Request header the server reads to resolve the calling user (see lib/server-auth.ts). */
+export const IDENTITY_HEADER = "x-cms-user";
+
+/**
+ * Install a one-time global `fetch` shim that attaches the active identity as
+ * the `x-cms-user` header on same-origin `/api/*` requests. This is how the
+ * server-side authorization layer learns who's calling without real auth wired
+ * up. The email is read from localStorage at call time (not install time), so
+ * it always reflects the current identity. Patching `window.fetch` keeps the
+ * ~100 scattered `fetch("/api/…")` call sites untouched; server-side fetches
+ * (e.g. Slack in lib/notifications.ts) run in Node and are unaffected.
+ */
+function installIdentityFetchInterceptor() {
+  if (typeof window === "undefined") return;
+  const w = window as typeof window & { __cmsFetchPatched?: boolean };
+  if (w.__cmsFetchPatched) return;
+  w.__cmsFetchPatched = true;
+
+  const originalFetch = window.fetch.bind(window);
+
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    // Resolve the request URL so we only touch our own API.
+    let url: string;
+    if (typeof input === "string") url = input;
+    else if (input instanceof URL) url = input.toString();
+    else url = input.url;
+
+    const isApi = url.startsWith("/api/") || url.includes(`${window.location.origin}/api/`);
+    if (!isApi) return originalFetch(input, init);
+
+    let email: string | null = null;
+    try {
+      email = localStorage.getItem(IDENTITY_STORAGE_KEY);
+    } catch {
+      /* localStorage blocked — send unauthenticated, server default-denies writes */
+    }
+    if (!email) return originalFetch(input, init);
+
+    const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+    headers.set(IDENTITY_HEADER, email);
+    return originalFetch(input, { ...init, headers });
+  };
+}
+
 export function CurrentUserProvider({ children }: { children: React.ReactNode }) {
+  // Install before any effect fires so the identity header rides on every
+  // `/api/*` request, including this provider's own mount-time user fetch.
+  // Idempotent + guarded, so calling during render is safe.
+  installIdentityFetchInterceptor();
+
   const [users, setUsers] = useState<User[]>([]);
   const [identity, setIdentityState] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
