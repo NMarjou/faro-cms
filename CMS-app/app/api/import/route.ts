@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { putFile, getFile } from "@/lib/storage";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 import type { Toc, TocCategory, TocSection, TocArticle, VariableSetsData } from "@/lib/types";
 import mammoth from "mammoth";
 import { marked } from "marked";
@@ -384,6 +386,8 @@ function parseFlareSnippet(html: string, filename: string): { name: string; cont
 
 // ─── API Routes ─────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { type, files, setName, merge } = body;

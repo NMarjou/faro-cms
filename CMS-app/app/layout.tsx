@@ -12,6 +12,8 @@ import { TabProvider } from "@/components/TabContext";
 import ThemeProvider from "@/components/ThemeProvider";
 import Workspace from "@/components/Workspace";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
+import AuthProvider from "@/components/AuthProvider";
+import { isAuthConfigured } from "@/lib/auth-options";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -83,16 +85,18 @@ export default function RootLayout({
       </head>
       <body>
         <ThemeProvider>
-          <CurrentUserProvider>
-            <TabProvider>
-              <div className="app-layout">
-                <SidebarTree />
-                <main className="main-content">
-                  <Workspace>{children}</Workspace>
-                </main>
-              </div>
-            </TabProvider>
-          </CurrentUserProvider>
+          <AuthProvider>
+            <CurrentUserProvider authConfigured={isAuthConfigured()}>
+              <TabProvider>
+                <div className="app-layout">
+                  <SidebarTree />
+                  <main className="main-content">
+                    <Workspace>{children}</Workspace>
+                  </main>
+                </div>
+              </TabProvider>
+            </CurrentUserProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

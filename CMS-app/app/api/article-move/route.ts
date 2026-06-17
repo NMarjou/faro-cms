@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile, deleteFile } from "@/lib/storage";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 import type { Toc, TocSection, TocArticle } from "@/lib/types";
 
 /**
@@ -104,6 +106,8 @@ function rewriteLinks(content: string, oldFile: string, newFile: string): string
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
     const { oldFile, newSlug, newTitle, newFolder } = body as {

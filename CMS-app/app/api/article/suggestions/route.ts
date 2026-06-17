@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
 import type { Suggestion, SuggestionsData } from "@/lib/types";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
 
 /**
  * Suggested edits API — sidecar JSON per article on the working branch.
@@ -52,6 +53,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Any signed-in user (tech-writer, author, or contributor) may suggest.
+  // The suggestion's author is taken from the authenticated identity, not
+  // the request body, so a caller can't post under someone else's name.
+  const caller = await getRequestUser(request);
+  if (!caller) return forbidden();
   try {
     const body = await request.json();
     const { path, suggestion } = body as {
@@ -65,12 +71,10 @@ export async function POST(request: NextRequest) {
     if (!suggestion || typeof suggestion !== "object") {
       return NextResponse.json({ error: "suggestion is required" }, { status: 400 });
     }
-    const { author, originalText, suggestedText, authorName, occurrenceIndex, note } =
-      suggestion;
+    const { originalText, suggestedText, occurrenceIndex, note } = suggestion;
+    const author = caller.email;
+    const authorName = caller.name;
 
-    if (!author || typeof author !== "string") {
-      return NextResponse.json({ error: "suggestion.author is required" }, { status: 400 });
-    }
     if (!originalText || typeof originalText !== "string") {
       return NextResponse.json({ error: "suggestion.originalText is required" }, { status: 400 });
     }

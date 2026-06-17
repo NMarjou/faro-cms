@@ -8,6 +8,8 @@ import {
   ensureWorkingBranch,
 } from "@/lib/github";
 import { getFile } from "@/lib/storage";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { canPublish } from "@/lib/permissions";
 import type { Toc, TocArticle } from "@/lib/types";
 
 /**
@@ -37,6 +39,8 @@ function findBlockingArticles(toc: Toc): Array<{ file: string; title: string }> 
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!canPublish(user?.role ?? null)) return forbidden("Only tech writers can publish");
   try {
     const body = await request.json();
     const { title, description, branch: explicitBranch } = body;

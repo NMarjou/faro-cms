@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedFile, putFile } from "@/lib/storage";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { isTechWriter } from "@/lib/permissions";
 import type { Variables, VariableSet, VariableSetsData } from "@/lib/types";
 
 const CACHE_HEADERS = {
@@ -60,6 +62,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
     const body = await request.json();
 

@@ -3,16 +3,22 @@ import * as fs from "fs";
 import * as path from "path";
 import { putFile } from "@/lib/storage";
 import { setImageOwner } from "@/lib/image-meta";
+import { getRequestUser, forbidden } from "@/lib/server-auth";
+import { canManageImages } from "@/lib/permissions";
 
 const CONTENT_ROOT = path.resolve(process.cwd(), "..", "CMS-content");
 const isLocal = !process.env.GITHUB_TOKEN;
 
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!canManageImages(user?.role ?? null)) return forbidden();
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const folder = (formData.get("folder") as string) || "";
-    const owner = (formData.get("owner") as string) || "";
+    // Ownership is recorded from the authenticated identity, not the form
+    // field — the uploader can't claim an image belongs to someone else.
+    const owner = user!.email;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });

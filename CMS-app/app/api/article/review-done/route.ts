@@ -1,25 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
 import {
-  DEFAULT_USERS,
   type Suggestion,
   type SuggestionsData,
   type Toc,
-  type TocArticle,
-  type User,
-  type UsersData,
 } from "@/lib/types";
 import { notifyReviewMarkedDone, notifyReviewSignedOff } from "@/lib/notifications";
-
-async function loadUsers(): Promise<User[]> {
-  try {
-    const file = await getFile("content/users.json");
-    const data = JSON.parse(file.content) as UsersData;
-    return data.users || DEFAULT_USERS;
-  } catch {
-    return DEFAULT_USERS;
-  }
-}
+import { getRequestUser, loadUsers, findTocArticle, forbidden } from "@/lib/server-auth";
 
 /**
  * POST /api/article/review-done
@@ -41,22 +28,6 @@ async function loadUsers(): Promise<User[]> {
  * Returns 409 when the gate refuses, with `unresolvedComments` and
  * `pendingSuggestions` counts so the UI can render a precise warning.
  */
-
-function findArticle(toc: Toc, file: string): TocArticle | null {
-  for (const cat of toc.categories) {
-    for (const sec of cat.sections) {
-      const direct = sec.articles.find((a) => a.file === file);
-      if (direct) return direct;
-      if (sec.subsections) {
-        for (const sub of sec.subsections) {
-          const nested = sub.articles.find((a) => a.file === file);
-          if (nested) return nested;
-        }
-      }
-    }
-  }
-  return toc.articles?.find((a) => a.file === file) || null;
-}
 
 function sidecarSuggestionsPath(articleFile: string): string {
   const trimmed = articleFile.replace(/\.[a-zA-Z0-9]+$/, "");
@@ -91,39 +62,32 @@ async function countUnresolvedComments(articleFile: string): Promise<number> {
 }
 
 export async function POST(request: NextRequest) {
+  // The reviewer is the authenticated caller — never trust a body-supplied
+  // email. Tech writers can sign off any article; contributors only ones
+  // they're assigned to (checked below).
+  const caller = await getRequestUser(request);
+  if (!caller) return forbidden();
   try {
     const body = await request.json();
-    const { path, reviewerEmail, done } = body as {
+    const { path, done } = body as {
       path?: string;
-      reviewerEmail?: string;
       done?: boolean;
     };
     if (!path || typeof path !== "string") {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
-    if (!reviewerEmail || typeof reviewerEmail !== "string") {
-      return NextResponse.json({ error: "reviewerEmail is required" }, { status: 400 });
-    }
+    const reviewerEmail = caller.email;
     const markDone = done !== false; // default true
 
     const tocFile = await getFile("content/toc.json");
     const toc = JSON.parse(tocFile.content) as Toc;
-    const article = findArticle(toc, path);
+    const article = findTocArticle(toc, path);
     if (!article) {
       return NextResponse.json({ error: "Article not found in TOC" }, { status: 404 });
     }
 
-    // Resolve the caller's role. Tech writers can sign off any article;
-    // contributors can only mark done on articles they were assigned to.
     const users = await loadUsers();
     const lowerEmail = reviewerEmail.toLowerCase();
-    const caller = users.find((u) => u.email.toLowerCase() === lowerEmail);
-    if (!caller) {
-      return NextResponse.json(
-        { error: "Caller is not a known user" },
-        { status: 403 }
-      );
-    }
     const isTechWriter = caller.role === "tech-writer";
 
     if (!isTechWriter) {
