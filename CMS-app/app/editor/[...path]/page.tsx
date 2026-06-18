@@ -297,60 +297,29 @@ export default function EditorPage() {
           message: `Update ${articleMeta?.title || filePath}`,
         }),
       });
+      const saveData = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Save failed");
+        throw new Error(saveData.error || "Save failed");
       }
 
-      // Update lastModified in TOC. Saving body content invalidates two kinds
-      // of prior approval, because the article has effectively changed since:
-      //   • the tech writer's sign-off (reviewComplete) — must be re-signed
-      //   • an author's submit-for-approval (approvalStatus) when the owner
-      //     edits — must be re-submitted
-      // Clear whichever applies in the same TOC write and mirror locally.
-      let clearedSignoff = false;
-      let clearedApproval = false;
-      if (articleMeta) {
-        const tocRes = await fetch("/api/toc");
-        if (tocRes.ok) {
-          const toc = await tocRes.json();
-          const art = findArticleInToc(toc, filePath);
-          if (art) {
-            art.lastModified = new Date().toISOString().split("T")[0];
-            if (art.reviewComplete) {
-              delete art.reviewComplete;
-              delete art.reviewCompletedBy;
-              delete art.reviewCompletedAt;
-              clearedSignoff = true;
-            }
-            if (isOwner && art.approvalStatus === "submitted") {
-              delete art.approvalStatus;
-              delete art.submittedBy;
-              delete art.submittedAt;
-              clearedApproval = true;
-            }
-            await fetch("/api/toc", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ toc }),
-            });
-          }
-        }
-      }
-
-      if (clearedSignoff || clearedApproval) {
+      // The server keeps the TOC entry's workflow bookkeeping in sync as part
+      // of the save (bump lastModified, reset a stale sign-off, and clear an
+      // owner's pending submit-for-approval — the body changed). Mirror what it
+      // reports back so the UI reflects authoritative state without a refetch.
+      if (articleMeta && (saveData.lastModified || saveData.clearedSignoff || saveData.clearedApproval)) {
         setArticleMeta((p) =>
           p
             ? {
                 ...p,
-                ...(clearedSignoff
+                ...(saveData.lastModified ? { lastModified: saveData.lastModified } : {}),
+                ...(saveData.clearedSignoff
                   ? {
                       reviewComplete: undefined,
                       reviewCompletedBy: undefined,
                       reviewCompletedAt: undefined,
                     }
                   : {}),
-                ...(clearedApproval
+                ...(saveData.clearedApproval
                   ? {
                       approvalStatus: undefined,
                       submittedBy: undefined,

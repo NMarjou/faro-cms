@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, getCachedFile, putFile, deleteFile } from "@/lib/storage";
 import { getRequestUser, canWriteContentPath, forbidden } from "@/lib/server-auth";
+import { syncArticleWorkflowOnSave } from "@/lib/article-workflow";
 
 // Small metadata files the editor reads on every article open. Caching
 // these via getCachedFile means hundreds of editor opens share one read;
@@ -73,7 +74,17 @@ export async function PUT(request: NextRequest) {
     if (!(await canWriteContentPath(path, user))) return forbidden();
 
     const result = await putFile(`content/${path}`, content, message, branch, sha);
-    return NextResponse.json(result);
+    // Keep the TOC entry's workflow bookkeeping in sync server-side (bump
+    // lastModified, reset sign-off/approval since the body changed). No-op for
+    // non-article paths. Best-effort — a bookkeeping failure shouldn't fail the
+    // body save that already succeeded.
+    let workflow = {};
+    try {
+      workflow = await syncArticleWorkflowOnSave(path, user);
+    } catch (err) {
+      console.warn(`[content] workflow sync failed for ${path}:`, err);
+    }
+    return NextResponse.json({ ...result, ...workflow });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to write file";
     return NextResponse.json({ error: message }, { status: 500 });
