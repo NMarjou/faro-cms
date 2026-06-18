@@ -356,16 +356,17 @@ export default function EditorPage() {
   }, [autosaveInterval, isDirty, saving]);
 
   const handlePublish = async () => {
-    // Local gate: this article was sent for review and isn't signed off
-    // yet — bail before we save+publish. The server-side gate in
-    // /api/publish covers other articles on the working branch and the
-    // edge case where saving (just below) clears `reviewComplete`.
+    // Local gate: an article that owes a tech-writer sign-off can't publish.
+    // Two tracks lead here — sent for contributor review, or submitted for
+    // approval by its author — and both clear only when `reviewComplete` is
+    // set. The server gate in /api/publish is authoritative and also covers
+    // the other articles on the working branch.
     if (
-      articleMeta?.assignedTo &&
-      articleMeta.assignedTo.length > 0 &&
-      !articleMeta.reviewComplete
+      !articleMeta?.reviewComplete &&
+      (((articleMeta?.assignedTo?.length ?? 0) > 0) ||
+        articleMeta?.approvalStatus === "submitted")
     ) {
-      setError("This article is in review. Sign off before publishing.");
+      setError("This article is awaiting sign-off. Sign off before publishing.");
       return;
     }
     await handleSave();
@@ -381,36 +382,6 @@ export default function EditorPage() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Publish failed"); }
       const data = await res.json();
       setPublishUrl(data.prUrl);
-
-      // Publishing is the sign-off: if this article was awaiting approval,
-      // clear its submitted status now that a tech writer has shipped it.
-      if (articleMeta && isSubmitted) {
-        const tocRes = await fetch("/api/toc");
-        if (tocRes.ok) {
-          const toc = await tocRes.json();
-          const art = findArticleInToc(toc, filePath);
-          if (art && art.approvalStatus === "submitted") {
-            delete art.approvalStatus;
-            delete art.submittedBy;
-            delete art.submittedAt;
-            await fetch("/api/toc", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ toc, message: `Approve & publish ${art.title}` }),
-            });
-            setArticleMeta((p) =>
-              p
-                ? {
-                    ...p,
-                    approvalStatus: undefined,
-                    submittedBy: undefined,
-                    submittedAt: undefined,
-                  }
-                : p
-            );
-          }
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed");
     }
@@ -585,6 +556,11 @@ export default function EditorPage() {
               reviewComplete: data.reviewComplete || undefined,
               reviewCompletedBy: data.reviewCompletedBy,
               reviewCompletedAt: data.reviewCompletedAt,
+              // Signing off clears a pending author submission server-side;
+              // mirror it so the "Submitted" indicator disappears.
+              ...(data.approvalStatus === null
+                ? { approvalStatus: undefined, submittedBy: undefined, submittedAt: undefined }
+                : {}),
             }
           : p
       );
@@ -826,15 +802,17 @@ export default function EditorPage() {
                   : ""}
               </button>
             )}
-          {/* Tech-writer's article-level sign-off. Only visible when the
-              article was actually sent for review. Mirrors the contributor's
-              "Mark as done" visual language with the same gold/check
-              styling so "complete this review round" reads consistently. */}
+          {/* Tech-writer's article-level sign-off. Visible once the article
+              owes a sign-off via either track — sent for contributor review or
+              submitted for approval by its author — and stays visible while
+              signed off so it can be reopened. Mirrors the contributor's
+              "Mark as done" visual language with the same gold/check styling. */}
           {!isSnippet &&
             articleMeta &&
             isTechWriter(role) &&
-            articleMeta.assignedTo &&
-            articleMeta.assignedTo.length > 0 &&
+            (((articleMeta.assignedTo?.length ?? 0) > 0) ||
+              articleMeta.approvalStatus === "submitted" ||
+              articleMeta.reviewComplete) &&
             (articleMeta.reviewComplete ? (
               <button
                 onClick={handleTechWriterToggleReviewDone}

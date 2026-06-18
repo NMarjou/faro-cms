@@ -129,6 +129,13 @@ export async function POST(request: NextRequest) {
         article.reviewComplete = true;
         article.reviewCompletedBy = reviewerEmail;
         article.reviewCompletedAt = new Date().toISOString();
+        // Signing off fulfills an author's pending submit-for-approval —
+        // the request has been answered, so clear the waiting flag.
+        if (article.approvalStatus === "submitted") {
+          delete article.approvalStatus;
+          delete article.submittedBy;
+          delete article.submittedAt;
+        }
       } else {
         delete article.reviewComplete;
         delete article.reviewCompletedBy;
@@ -236,6 +243,8 @@ export async function POST(request: NextRequest) {
       reviewComplete: article.reviewComplete || false,
       reviewCompletedBy: article.reviewCompletedBy,
       reviewCompletedAt: article.reviewCompletedAt,
+      // Reflect the (possibly cleared) approval flag so the editor can mirror it.
+      approvalStatus: article.approvalStatus ?? null,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to update review status";

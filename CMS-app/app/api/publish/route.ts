@@ -13,10 +13,13 @@ import { canPublish } from "@/lib/permissions";
 import type { Toc, TocArticle } from "@/lib/types";
 
 /**
- * Walk the TOC and return every article that's blocking publish: it was
- * sent for review (`assignedTo` non-empty) but the tech writer hasn't
- * flipped the article-level `reviewComplete` flag. Snippets and articles
- * never sent for review are unaffected — review is optional.
+ * Walk the TOC and return every article that's blocking publish — i.e. it
+ * still owes a tech-writer sign-off (`reviewComplete !== true`) for either
+ * review track:
+ *   - sent for contributor review (`assignedTo` non-empty), or
+ *   - submitted for approval by its author (`approvalStatus === "submitted"`).
+ * Articles in neither track are unaffected — review is optional, but once an
+ * article enters a track it must be signed off before it can publish.
  */
 function collectArticles(toc: Toc): TocArticle[] {
   const all: TocArticle[] = [];
@@ -34,7 +37,12 @@ function collectArticles(toc: Toc): TocArticle[] {
 
 function findBlockingArticles(toc: Toc): Array<{ file: string; title: string }> {
   return collectArticles(toc)
-    .filter((a) => (a.assignedTo?.length ?? 0) > 0 && a.reviewComplete !== true)
+    .filter((a) => {
+      if (a.reviewComplete === true) return false;
+      const inContributorReview = (a.assignedTo?.length ?? 0) > 0;
+      const awaitingApproval = a.approvalStatus === "submitted";
+      return inContributorReview || awaitingApproval;
+    })
     .map((a) => ({ file: a.file, title: a.title }));
 }
 
