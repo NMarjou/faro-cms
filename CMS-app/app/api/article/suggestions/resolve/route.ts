@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFile, putFile } from "@/lib/storage";
+import { mutateJsonFile } from "@/lib/sidecar";
 import {
   type Suggestion,
   type SuggestionsData,
@@ -123,15 +124,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Flip the suggestion's status in the sidecar.
-    const nextList: Suggestion[] = list.map((s) =>
-      s.id === id ? { ...s, status: action === "accept" ? "accepted" : "rejected" } : s
-    );
-    await putFile(
+    // Flip the suggestion's status in the sidecar, merging into the current
+    // file so a concurrent resolve/append isn't dropped.
+    const resolved = await mutateJsonFile<SuggestionsData>(
       sidecarPath(path),
-      JSON.stringify({ suggestions: nextList }, null, 2),
+      (cur) => ({
+        suggestions: (cur?.suggestions ?? []).map((s) =>
+          s.id === id
+            ? { ...s, status: action === "accept" ? "accepted" : "rejected" }
+            : s
+        ),
+      }),
       `${action === "accept" ? "Accept" : "Reject"} suggestion ${id}`
     );
+    const nextList: Suggestion[] = resolved.suggestions;
 
     // Fan out a notification to the original contributor. Resolve the
     // tech writer's display name + the article title from the user list

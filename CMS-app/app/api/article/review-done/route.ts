@@ -69,9 +69,11 @@ export async function POST(request: NextRequest) {
   if (!caller) return forbidden();
   try {
     const body = await request.json();
-    const { path, done } = body as {
+    const { path, done, force } = body as {
       path?: string;
       done?: boolean;
+      /** Tech-writer override to sign off despite outstanding contributor reviews. */
+      force?: boolean;
     };
     if (!path || typeof path !== "string") {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
@@ -118,6 +120,27 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
+
+      // Soft gate: a tech writer signing off while assigned contributors
+      // haven't all marked their review done. The tech writer keeps ultimate
+      // authority — `force` overrides — but the choice is now surfaced instead
+      // of silently ignoring `reviewsDone`.
+      if (isTechWriter && !force) {
+        const assigned = (article.assignedTo || []).map((e) => e.toLowerCase());
+        const doneSet = new Set((article.reviewsDone || []).map((e) => e.toLowerCase()));
+        const outstanding = assigned.filter((e) => !doneSet.has(e));
+        if (outstanding.length > 0) {
+          return NextResponse.json(
+            {
+              error: "Some assigned reviewers haven't marked their review done.",
+              needsConfirm: true,
+              reviewsDoneCount: assigned.length - outstanding.length,
+              totalReviewers: assigned.length,
+            },
+            { status: 409 }
+          );
+        }
+      }
     }
 
     let wasNewlyDone = false;
@@ -129,6 +152,13 @@ export async function POST(request: NextRequest) {
         article.reviewComplete = true;
         article.reviewCompletedBy = reviewerEmail;
         article.reviewCompletedAt = new Date().toISOString();
+        // Signing off fulfills an author's pending submit-for-approval —
+        // the request has been answered, so clear the waiting flag.
+        if (article.approvalStatus === "submitted") {
+          delete article.approvalStatus;
+          delete article.submittedBy;
+          delete article.submittedAt;
+        }
       } else {
         delete article.reviewComplete;
         delete article.reviewCompletedBy;
@@ -236,6 +266,8 @@ export async function POST(request: NextRequest) {
       reviewComplete: article.reviewComplete || false,
       reviewCompletedBy: article.reviewCompletedBy,
       reviewCompletedAt: article.reviewCompletedAt,
+      // Reflect the (possibly cleared) approval flag so the editor can mirror it.
+      approvalStatus: article.approvalStatus ?? null,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to update review status";

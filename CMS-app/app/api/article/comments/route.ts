@@ -1,20 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, putFile } from "@/lib/storage";
+import { getFile } from "@/lib/storage";
+import { mutateJsonFile } from "@/lib/sidecar";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 
 /**
- * GET  /api/article/comments?path=<articleFile>
- * PUT  /api/article/comments  body: { path, comments[], message? }
+ * GET    /api/article/comments?path=<articleFile>
+ * POST   /api/article/comments  { path, comment }   — add
+ * PATCH  /api/article/comments  { path, comment }    — replace by id (edit/reply/resolve)
+ * DELETE /api/article/comments  { path, id }         — remove by id
  *
- * Comments persist in a sidecar file next to the article. For an article at
- * `help/passport/getting-started.mdx`, comments live at
- * `help/passport/getting-started.comments.json` (storage layer maps these to
- * `CMS-content/...` on disk / `CMS-content/...` on GitHub).
+ * Comments persist in a sidecar file next to the article. Writes are
+ * per-operation and server-merged through `mutateJsonFile`, so concurrent
+ * reviewers' comments don't clobber each other (the old whole-array PUT let a
+ * stale client array erase others' comments). Every write returns the
+ * authoritative list so the client can reconcile.
  */
 
+interface CommentRecord {
+  id: string;
+  [key: string]: unknown;
+}
+interface CommentsData {
+  comments: CommentRecord[];
+}
+
 function sidecarPath(articleFile: string): string {
-  // Strip the article extension and append `.comments.json`. Handles `.mdx`,
-  // `.md`, `.html`, `.htm`, anything else with a dot — falls back to suffix.
   const trimmed = articleFile.replace(/\.[a-zA-Z0-9]+$/, "");
   return `content/${trimmed}.comments.json`;
 }
@@ -29,43 +39,86 @@ export async function GET(request: NextRequest) {
     const data = JSON.parse(file.content);
     return NextResponse.json({ comments: Array.isArray(data.comments) ? data.comments : [] });
   } catch {
-    // No sidecar yet — return empty list rather than 404 so callers don't
-    // have to special-case "first comment ever".
+    // No sidecar yet — return empty rather than 404 so callers don't special-case
+    // "first comment ever".
     return NextResponse.json({ comments: [] });
   }
 }
 
-export async function PUT(request: NextRequest) {
-  // Comments are a review activity shared by all roles (the editor
-  // auto-persists them for any user who opens an article). Require a known
-  // signed-in user, but don't restrict by role.
+/** Comments are a review activity for all roles — require a known user, no role gate. */
+export async function POST(request: NextRequest) {
   const caller = await getRequestUser(request);
   if (!caller) return forbidden();
   try {
-    const body = await request.json();
-    const { path, comments, message } = body as {
+    const { path, comment } = (await request.json()) as {
       path?: string;
-      comments?: unknown[];
-      message?: string;
+      comment?: CommentRecord;
     };
     if (!path || typeof path !== "string") {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
-    if (!Array.isArray(comments)) {
-      return NextResponse.json({ error: "comments array is required" }, { status: 400 });
+    if (!comment || typeof comment.id !== "string") {
+      return NextResponse.json({ error: "comment with an id is required" }, { status: 400 });
     }
-
-    const result = await putFile(
+    const data = await mutateJsonFile<CommentsData>(
       sidecarPath(path),
-      JSON.stringify({ comments }, null, 2),
-      message ||
-        (comments.length === 0
-          ? `Clear comments on ${path}`
-          : `Update comments on ${path} (${comments.length})`)
+      (cur) => ({ comments: [...(cur?.comments ?? []), comment] }),
+      `Add comment on ${path}`
     );
-    return NextResponse.json(result);
+    return NextResponse.json({ comments: data.comments });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Failed to save comments";
+    const msg = error instanceof Error ? error.message : "Failed to add comment";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const caller = await getRequestUser(request);
+  if (!caller) return forbidden();
+  try {
+    const { path, comment } = (await request.json()) as {
+      path?: string;
+      comment?: CommentRecord;
+    };
+    if (!path || typeof path !== "string") {
+      return NextResponse.json({ error: "path is required" }, { status: 400 });
+    }
+    if (!comment || typeof comment.id !== "string") {
+      return NextResponse.json({ error: "comment with an id is required" }, { status: 400 });
+    }
+    const data = await mutateJsonFile<CommentsData>(
+      sidecarPath(path),
+      (cur) => ({
+        comments: (cur?.comments ?? []).map((c) => (c.id === comment.id ? comment : c)),
+      }),
+      `Update comment on ${path}`
+    );
+    return NextResponse.json({ comments: data.comments });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to update comment";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const caller = await getRequestUser(request);
+  if (!caller) return forbidden();
+  try {
+    const { path, id } = (await request.json()) as { path?: string; id?: string };
+    if (!path || typeof path !== "string") {
+      return NextResponse.json({ error: "path is required" }, { status: 400 });
+    }
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+    const data = await mutateJsonFile<CommentsData>(
+      sidecarPath(path),
+      (cur) => ({ comments: (cur?.comments ?? []).filter((c) => c.id !== id) }),
+      `Delete comment on ${path}`
+    );
+    return NextResponse.json({ comments: data.comments });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to delete comment";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

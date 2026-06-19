@@ -297,65 +297,43 @@ export default function EditorPage() {
           message: `Update ${articleMeta?.title || filePath}`,
         }),
       });
+      const saveData = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Save failed");
+        throw new Error(saveData.error || "Save failed");
       }
 
-      // Update lastModified in TOC. Saving body content invalidates two kinds
-      // of prior approval, because the article has effectively changed since:
-      //   • the tech writer's sign-off (reviewComplete) — must be re-signed
-      //   • an author's submit-for-approval (approvalStatus) when the owner
-      //     edits — must be re-submitted
-      // Clear whichever applies in the same TOC write and mirror locally.
-      let clearedSignoff = false;
-      let clearedApproval = false;
-      if (articleMeta) {
-        const tocRes = await fetch("/api/toc");
-        if (tocRes.ok) {
-          const toc = await tocRes.json();
-          const art = findArticleInToc(toc, filePath);
-          if (art) {
-            art.lastModified = new Date().toISOString().split("T")[0];
-            if (art.reviewComplete) {
-              delete art.reviewComplete;
-              delete art.reviewCompletedBy;
-              delete art.reviewCompletedAt;
-              clearedSignoff = true;
-            }
-            if (isOwner && art.approvalStatus === "submitted") {
-              delete art.approvalStatus;
-              delete art.submittedBy;
-              delete art.submittedAt;
-              clearedApproval = true;
-            }
-            await fetch("/api/toc", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ toc }),
-            });
-          }
-        }
-      }
-
-      if (clearedSignoff || clearedApproval) {
+      // The server keeps the TOC entry's workflow bookkeeping in sync as part
+      // of the save (bump lastModified, reset a stale sign-off, and clear an
+      // owner's pending submit-for-approval — the body changed). Mirror what it
+      // reports back so the UI reflects authoritative state without a refetch.
+      if (
+        articleMeta &&
+        (saveData.lastModified ||
+          saveData.clearedSignoff ||
+          saveData.clearedApproval ||
+          saveData.clearedPublished)
+      ) {
         setArticleMeta((p) =>
           p
             ? {
                 ...p,
-                ...(clearedSignoff
+                ...(saveData.lastModified ? { lastModified: saveData.lastModified } : {}),
+                ...(saveData.clearedSignoff
                   ? {
                       reviewComplete: undefined,
                       reviewCompletedBy: undefined,
                       reviewCompletedAt: undefined,
                     }
                   : {}),
-                ...(clearedApproval
+                ...(saveData.clearedApproval
                   ? {
                       approvalStatus: undefined,
                       submittedBy: undefined,
                       submittedAt: undefined,
                     }
+                  : {}),
+                ...(saveData.clearedPublished
+                  ? { published: undefined, publishedAt: undefined }
                   : {}),
               }
             : p
@@ -387,61 +365,31 @@ export default function EditorPage() {
   }, [autosaveInterval, isDirty, saving]);
 
   const handlePublish = async () => {
-    // Local gate: this article was sent for review and isn't signed off
-    // yet — bail before we save+publish. The server-side gate in
-    // /api/publish covers other articles on the working branch and the
-    // edge case where saving (just below) clears `reviewComplete`.
+    // Local gate: an article that owes a tech-writer sign-off can't publish.
+    // Two tracks lead here — sent for contributor review, or submitted for
+    // approval by its author — and both clear only when `reviewComplete` is
+    // set. The server gate in /api/publish is authoritative and also covers
+    // the other articles on the working branch.
     if (
-      articleMeta?.assignedTo &&
-      articleMeta.assignedTo.length > 0 &&
-      !articleMeta.reviewComplete
+      !articleMeta?.reviewComplete &&
+      (((articleMeta?.assignedTo?.length ?? 0) > 0) ||
+        articleMeta?.approvalStatus === "submitted")
     ) {
-      setError("This article is in review. Sign off before publishing.");
+      setError("This article is awaiting sign-off. Sign off before publishing.");
       return;
     }
     await handleSave();
     try {
-      const res = await fetch("/api/publish", {
+      // Per-article publish: opens an isolated PR with just this article's body
+      // and its TOC entry, so it ships independently of other in-flight work.
+      const res = await fetch("/api/publish/article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `Update: ${articleMeta?.title || filePath}`,
-          description: `Content update for ${filePath}`,
-        }),
+        body: JSON.stringify({ path: filePath }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Publish failed"); }
       const data = await res.json();
       setPublishUrl(data.prUrl);
-
-      // Publishing is the sign-off: if this article was awaiting approval,
-      // clear its submitted status now that a tech writer has shipped it.
-      if (articleMeta && isSubmitted) {
-        const tocRes = await fetch("/api/toc");
-        if (tocRes.ok) {
-          const toc = await tocRes.json();
-          const art = findArticleInToc(toc, filePath);
-          if (art && art.approvalStatus === "submitted") {
-            delete art.approvalStatus;
-            delete art.submittedBy;
-            delete art.submittedAt;
-            await fetch("/api/toc", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ toc, message: `Approve & publish ${art.title}` }),
-            });
-            setArticleMeta((p) =>
-              p
-                ? {
-                    ...p,
-                    approvalStatus: undefined,
-                    submittedBy: undefined,
-                    submittedAt: undefined,
-                  }
-                : p
-            );
-          }
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed");
     }
@@ -573,15 +521,7 @@ export default function EditorPage() {
    * here is a "soft" block — render the warning banner with counts instead
    * of the danger error banner.
    */
-  const handleTechWriterToggleReviewDone = async () => {
-    const senderEmail =
-      typeof window !== "undefined"
-        ? localStorage.getItem("cms-current-user") || undefined
-        : undefined;
-    if (!senderEmail) {
-      setError("No active identity. Set yourself in Settings first.");
-      return;
-    }
+  const handleTechWriterToggleReviewDone = async (force = false) => {
     setWarning(null);
     setError(null);
     const currentlyComplete = articleMeta?.reviewComplete === true;
@@ -591,11 +531,20 @@ export default function EditorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path: filePath,
-          reviewerEmail: senderEmail,
           done: !currentlyComplete,
+          force,
         }),
       });
       const data = await res.json().catch(() => ({}));
+      // Soft gate: assigned reviewers haven't all finished. The tech writer can
+      // override — confirm, then retry with force.
+      if (res.status === 409 && data.needsConfirm) {
+        const proceed = window.confirm(
+          `Only ${data.reviewsDoneCount}/${data.totalReviewers} assigned reviewer(s) have marked their review done. Sign off anyway?`
+        );
+        if (proceed) await handleTechWriterToggleReviewDone(true);
+        return;
+      }
       if (res.status === 409) {
         setWarning(
           formatBlockedMessage(
@@ -616,6 +565,11 @@ export default function EditorPage() {
               reviewComplete: data.reviewComplete || undefined,
               reviewCompletedBy: data.reviewCompletedBy,
               reviewCompletedAt: data.reviewCompletedAt,
+              // Signing off clears a pending author submission server-side;
+              // mirror it so the "Submitted" indicator disappears.
+              ...(data.approvalStatus === null
+                ? { approvalStatus: undefined, submittedBy: undefined, submittedAt: undefined }
+                : {}),
             }
           : p
       );
@@ -857,18 +811,20 @@ export default function EditorPage() {
                   : ""}
               </button>
             )}
-          {/* Tech-writer's article-level sign-off. Only visible when the
-              article was actually sent for review. Mirrors the contributor's
-              "Mark as done" visual language with the same gold/check
-              styling so "complete this review round" reads consistently. */}
+          {/* Tech-writer's article-level sign-off. Visible once the article
+              owes a sign-off via either track — sent for contributor review or
+              submitted for approval by its author — and stays visible while
+              signed off so it can be reopened. Mirrors the contributor's
+              "Mark as done" visual language with the same gold/check styling. */}
           {!isSnippet &&
             articleMeta &&
             isTechWriter(role) &&
-            articleMeta.assignedTo &&
-            articleMeta.assignedTo.length > 0 &&
+            (((articleMeta.assignedTo?.length ?? 0) > 0) ||
+              articleMeta.approvalStatus === "submitted" ||
+              articleMeta.reviewComplete) &&
             (articleMeta.reviewComplete ? (
               <button
-                onClick={handleTechWriterToggleReviewDone}
+                onClick={() => handleTechWriterToggleReviewDone()}
                 title="Reopen the review (re-enables comments and suggestions)"
                 className="btn btn-inline-icon btn-review-done"
               >
@@ -877,12 +833,19 @@ export default function EditorPage() {
               </button>
             ) : (
               <button
-                onClick={handleTechWriterToggleReviewDone}
+                onClick={() => handleTechWriterToggleReviewDone()}
                 title="Approve this article for publish — distinct from a contributor's per-reviewer mark-as-done"
                 className="btn btn-gold btn-inline-icon"
               >
                 <Icon name="check" weight="bold" size={16} />
                 Sign off
+                {(articleMeta.assignedTo?.length ?? 0) > 0
+                  ? ` (${(articleMeta.reviewsDone || []).filter((e) =>
+                      (articleMeta.assignedTo || []).some(
+                        (a) => a.toLowerCase() === e.toLowerCase()
+                      )
+                    ).length}/${articleMeta.assignedTo!.length})`
+                  : ""}
               </button>
             ))}
           {canPublish(role) && (
