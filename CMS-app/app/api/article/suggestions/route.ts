@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, putFile } from "@/lib/storage";
+import { getFile } from "@/lib/storage";
+import { mutateJsonFile } from "@/lib/sidecar";
 import type { Suggestion, SuggestionsData } from "@/lib/types";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 
@@ -28,15 +29,6 @@ async function readSidecar(articleFile: string): Promise<Suggestion[]> {
   } catch {
     return [];
   }
-}
-
-async function writeSidecar(
-  articleFile: string,
-  suggestions: Suggestion[],
-  message: string
-): Promise<void> {
-  const body: SuggestionsData = { suggestions };
-  await putFile(sidecarPath(articleFile), JSON.stringify(body, null, 2), message);
 }
 
 function newId(): string {
@@ -88,7 +80,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existing = await readSidecar(path);
     const entry: Suggestion = {
       id: newId(),
       author,
@@ -100,15 +91,16 @@ export async function POST(request: NextRequest) {
       occurrenceIndex: typeof occurrenceIndex === "number" ? occurrenceIndex : undefined,
       note: note?.trim() || undefined,
     };
-    const next = [...existing, entry];
 
-    await writeSidecar(
-      path,
-      next,
+    // Append through the concurrency-safe writer so a simultaneous suggestion
+    // from another reviewer isn't dropped.
+    const data = await mutateJsonFile<SuggestionsData>(
+      sidecarPath(path),
+      (cur) => ({ suggestions: [...(cur?.suggestions ?? []), entry] }),
       `Suggestion: ${(authorName || author)} on ${path.split("/").pop()}`
     );
 
-    return NextResponse.json({ suggestion: entry, suggestions: next });
+    return NextResponse.json({ suggestion: entry, suggestions: data.suggestions });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to save suggestion";
     return NextResponse.json({ error: msg }, { status: 500 });

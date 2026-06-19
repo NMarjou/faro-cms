@@ -238,21 +238,10 @@ export default function Editor({
     };
   }, [filePath]);
 
-  // Persist on change. Skip until the initial load is complete so we don't
-  // overwrite the file with an empty array on first render.
-  useEffect(() => {
-    if (!filePath || !commentsLoaded) return;
-    const controller = new AbortController();
-    fetch("/api/article/comments", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: filePath, comments }),
-      signal: controller.signal,
-    }).catch(() => {
-      /* network / abort — surfaced in dev log if needed */
-    });
-    return () => controller.abort();
-  }, [filePath, commentsLoaded, comments]);
+  // Comments persist per-operation via the add/update/delete handlers below —
+  // each merges server-side, so concurrent reviewers don't clobber each other.
+  // (No whole-array auto-persist: that let a stale client array erase others'
+  // comments.)
 
   // ── Suggestion persistence ────────────────────────────────────────────
   // Reads only — appends and accept/reject happen via dedicated endpoints
@@ -379,17 +368,51 @@ export default function Editor({
     openReview("comments");
   }, [openReview, readDomSelection]);
 
+  // Each handler updates local state optimistically (snappy UI), persists the
+  // single change server-side, then reconciles to the authoritative list the
+  // server returns — which includes other reviewers' comments.
+  const reconcile = useCallback((d: { comments?: Comment[] } | null) => {
+    if (d?.comments) setComments(d.comments);
+  }, []);
+
   const handleAddComment = useCallback((comment: Comment) => {
     setComments((prev) => [...prev, comment]);
-  }, []);
+    if (!filePath) return;
+    fetch("/api/article/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filePath, comment }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(reconcile)
+      .catch(() => {});
+  }, [filePath, reconcile]);
 
   const handleUpdateComment = useCallback((updated: Comment) => {
     setComments((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-  }, []);
+    if (!filePath) return;
+    fetch("/api/article/comments", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filePath, comment: updated }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(reconcile)
+      .catch(() => {});
+  }, [filePath, reconcile]);
 
   const handleDeleteComment = useCallback((commentId: string) => {
     setComments((prev) => prev.filter((c) => c.id !== commentId));
-  }, []);
+    if (!filePath) return;
+    fetch("/api/article/comments", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filePath, id: commentId }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(reconcile)
+      .catch(() => {});
+  }, [filePath, reconcile]);
 
   // ── Suggested-edit handlers ────────────────────────────────────────────
   // Open the ReviewSidebar's Suggestions tab with a snapshot of the current
