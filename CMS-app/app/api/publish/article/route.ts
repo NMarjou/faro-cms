@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import {
   getFile,
   putFile,
@@ -26,6 +27,7 @@ import type { Toc } from "@/lib/types";
  * the working branch will publish without it; publish the resource separately.
  */
 export async function POST(request: NextRequest) {
+  setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canPublish(user?.role ?? null)) {
     return forbidden("Only tech writers can publish");

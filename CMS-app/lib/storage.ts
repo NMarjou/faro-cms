@@ -6,10 +6,16 @@ import * as github from "./github";
 import * as localFs from "./local-fs";
 import type { GitHubFile } from "./types";
 import { memoize, invalidate, invalidatePrefix } from "./cache";
+import { contentSubpathFromApp } from "./content-paths";
 
 const isLocal = !process.env.GITHUB_TOKEN;
 
-const FILE_KEY = (path: string) => `file:${path}`;
+// Key the file cache on the physical (project-rooted) subpath, not the app
+// path — otherwise the same `content/toc.json` app path collides across
+// projects and one project's cached read is served to another. Shared/platform
+// paths map to the same subpath for every project, so they still share a key
+// (correct — they're genuinely shared).
+const FILE_KEY = (path: string) => `file:${contentSubpathFromApp(path)}`;
 const FILE_TTL_MS = 60_000;
 
 export const SNIPPETS_LIST_PREFIX = "snippets:list:";

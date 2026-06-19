@@ -44,6 +44,10 @@ export const IDENTITY_EVENT = "cms-identity-changed";
 /** Request header the server reads to resolve the calling user (see lib/server-auth.ts). */
 export const IDENTITY_HEADER = "x-cms-user";
 
+/** localStorage key + header for the active project (see CurrentProjectProvider, lib/request-context.ts). */
+export const PROJECT_STORAGE_KEY = "cms-current-project";
+export const PROJECT_HEADER = "x-cms-project";
+
 /**
  * Install a one-time global `fetch` shim that attaches the active identity as
  * the `x-cms-user` header on same-origin `/api/*` requests. This is how the
@@ -72,15 +76,20 @@ function installIdentityFetchInterceptor() {
     if (!isApi) return originalFetch(input, init);
 
     let email: string | null = null;
+    let project: string | null = null;
     try {
       email = localStorage.getItem(IDENTITY_STORAGE_KEY);
+      project = localStorage.getItem(PROJECT_STORAGE_KEY);
     } catch {
       /* localStorage blocked — send unauthenticated, server default-denies writes */
     }
-    if (!email) return originalFetch(input, init);
+    if (!email && !project) return originalFetch(input, init);
 
     const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
-    headers.set(IDENTITY_HEADER, email);
+    if (email) headers.set(IDENTITY_HEADER, email);
+    // The active project scopes which project's content the server resolves
+    // (see lib/request-context.ts). Sourced from CurrentProjectProvider.
+    if (project) headers.set(PROJECT_HEADER, project);
     return originalFetch(input, { ...init, headers });
   };
 }

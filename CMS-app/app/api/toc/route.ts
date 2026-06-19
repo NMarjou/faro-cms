@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCachedFile, putFile } from "@/lib/storage";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
+import { setRequestProject } from "@/lib/request-context";
 
 const CACHE_HEADERS = {
   "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
 };
 
 export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const ref = request.nextUrl.searchParams.get("ref") || undefined;
 
   try {
@@ -20,6 +22,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

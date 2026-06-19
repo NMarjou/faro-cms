@@ -14,16 +14,21 @@
  * function is the seam Phase 2 will make request-scoped (x-cms-project header).
  */
 
+import { getCurrentProject } from "./request-context";
+
 /** Default project slug for the migrated single-project tree. */
 export const DEFAULT_PROJECT_SLUG = "accelerate";
 
 /**
- * The project whose content `content/<rel>` paths resolve to. Phase 0: always
- * the default (env-overridable). Phase 2 replaces this with per-request
- * resolution — every caller below goes through it, so that swap is localized.
+ * The project whose content `content/<rel>` paths resolve to — the per-request
+ * project bound by `setRequestProject` (lib/request-context.ts), falling back
+ * to the env/default outside a request. Every path mapping goes through here,
+ * so request-scoping the project is a single-function change.
  */
 export function currentProjectSlug(): string {
-  return process.env.CMS_DEFAULT_PROJECT || DEFAULT_PROJECT_SLUG;
+  // Lazy require avoids a load-order cycle (request-context imports the default
+  // slug from this module). Both only touch each other inside functions.
+  return getCurrentProject();
 }
 
 // ── Classification ───────────────────────────────────────────────────────────

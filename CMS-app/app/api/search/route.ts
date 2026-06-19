@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import Fuse from "fuse.js";
 import { getToc, buildSearchEntries } from "@/lib/content";
 import type { SearchEntry } from "@/lib/types";
@@ -32,6 +33,7 @@ async function getSearchIndex(): Promise<Fuse<SearchEntry>> {
 }
 
 export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const query = request.nextUrl.searchParams.get("q");
 
   if (!query || query.length < 2) {

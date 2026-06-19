@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getCachedFile, listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
 import { memoize } from "@/lib/cache";
 
@@ -56,7 +57,8 @@ async function loadSnippetNames(): Promise<string[]> {
   });
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const [variables, conditionsRaw, glossaryRaw, stylesRaw, snippetNames] =
     await Promise.all([
       loadVariables(),

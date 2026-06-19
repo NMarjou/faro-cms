@@ -12,6 +12,7 @@ import { TabProvider } from "@/components/TabContext";
 import ThemeProvider from "@/components/ThemeProvider";
 import Workspace from "@/components/Workspace";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
+import { CurrentProjectProvider } from "@/components/CurrentProjectProvider";
 import AuthProvider from "@/components/AuthProvider";
 import { isAuthConfigured } from "@/lib/auth-options";
 import "./globals.css";
@@ -87,14 +88,16 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <CurrentUserProvider authConfigured={isAuthConfigured()}>
-              <TabProvider>
-                <div className="app-layout">
-                  <SidebarTree />
-                  <main className="main-content">
-                    <Workspace>{children}</Workspace>
-                  </main>
-                </div>
-              </TabProvider>
+              <CurrentProjectProvider>
+                <TabProvider>
+                  <div className="app-layout">
+                    <SidebarTree />
+                    <main className="main-content">
+                      <Workspace>{children}</Workspace>
+                    </main>
+                  </div>
+                </TabProvider>
+              </CurrentProjectProvider>
             </CurrentUserProvider>
           </AuthProvider>
         </ThemeProvider>

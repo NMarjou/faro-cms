@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile, putFile } from "@/lib/storage";
 import { type Toc } from "@/lib/types";
 import { notifyArticleSubmittedForApproval } from "@/lib/notifications";
@@ -21,6 +22,7 @@ import { canSubmitForApproval } from "@/lib/permissions";
  * from the authenticated identity, not the request body.
  */
 export async function POST(request: NextRequest) {
+  setRequestProject(request);
   const caller = await getRequestUser(request);
   try {
     const body = await request.json();
