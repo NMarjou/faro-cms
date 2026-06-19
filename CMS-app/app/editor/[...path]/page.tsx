@@ -521,15 +521,7 @@ export default function EditorPage() {
    * here is a "soft" block — render the warning banner with counts instead
    * of the danger error banner.
    */
-  const handleTechWriterToggleReviewDone = async () => {
-    const senderEmail =
-      typeof window !== "undefined"
-        ? localStorage.getItem("cms-current-user") || undefined
-        : undefined;
-    if (!senderEmail) {
-      setError("No active identity. Set yourself in Settings first.");
-      return;
-    }
+  const handleTechWriterToggleReviewDone = async (force = false) => {
     setWarning(null);
     setError(null);
     const currentlyComplete = articleMeta?.reviewComplete === true;
@@ -539,11 +531,20 @@ export default function EditorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path: filePath,
-          reviewerEmail: senderEmail,
           done: !currentlyComplete,
+          force,
         }),
       });
       const data = await res.json().catch(() => ({}));
+      // Soft gate: assigned reviewers haven't all finished. The tech writer can
+      // override — confirm, then retry with force.
+      if (res.status === 409 && data.needsConfirm) {
+        const proceed = window.confirm(
+          `Only ${data.reviewsDoneCount}/${data.totalReviewers} assigned reviewer(s) have marked their review done. Sign off anyway?`
+        );
+        if (proceed) await handleTechWriterToggleReviewDone(true);
+        return;
+      }
       if (res.status === 409) {
         setWarning(
           formatBlockedMessage(
@@ -823,7 +824,7 @@ export default function EditorPage() {
               articleMeta.reviewComplete) &&
             (articleMeta.reviewComplete ? (
               <button
-                onClick={handleTechWriterToggleReviewDone}
+                onClick={() => handleTechWriterToggleReviewDone()}
                 title="Reopen the review (re-enables comments and suggestions)"
                 className="btn btn-inline-icon btn-review-done"
               >
@@ -832,12 +833,19 @@ export default function EditorPage() {
               </button>
             ) : (
               <button
-                onClick={handleTechWriterToggleReviewDone}
+                onClick={() => handleTechWriterToggleReviewDone()}
                 title="Approve this article for publish — distinct from a contributor's per-reviewer mark-as-done"
                 className="btn btn-gold btn-inline-icon"
               >
                 <Icon name="check" weight="bold" size={16} />
                 Sign off
+                {(articleMeta.assignedTo?.length ?? 0) > 0
+                  ? ` (${(articleMeta.reviewsDone || []).filter((e) =>
+                      (articleMeta.assignedTo || []).some(
+                        (a) => a.toLowerCase() === e.toLowerCase()
+                      )
+                    ).length}/${articleMeta.assignedTo!.length})`
+                  : ""}
               </button>
             ))}
           {canPublish(role) && (
