@@ -306,7 +306,13 @@ export default function EditorPage() {
       // of the save (bump lastModified, reset a stale sign-off, and clear an
       // owner's pending submit-for-approval — the body changed). Mirror what it
       // reports back so the UI reflects authoritative state without a refetch.
-      if (articleMeta && (saveData.lastModified || saveData.clearedSignoff || saveData.clearedApproval)) {
+      if (
+        articleMeta &&
+        (saveData.lastModified ||
+          saveData.clearedSignoff ||
+          saveData.clearedApproval ||
+          saveData.clearedPublished)
+      ) {
         setArticleMeta((p) =>
           p
             ? {
@@ -325,6 +331,9 @@ export default function EditorPage() {
                       submittedBy: undefined,
                       submittedAt: undefined,
                     }
+                  : {}),
+                ...(saveData.clearedPublished
+                  ? { published: undefined, publishedAt: undefined }
                   : {}),
               }
             : p

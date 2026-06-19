@@ -241,6 +241,19 @@ export async function createPR(
   return { url: data.html_url, number: data.number };
 }
 
+/** Repo paths (CMS-content/…) of every file changed in a pull request. */
+export async function getPullFiles(prNumber: number): Promise<string[]> {
+  const octokit = getOctokit();
+  const { owner, repo } = getRepo();
+  const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
+    owner,
+    repo,
+    pull_number: prNumber,
+    per_page: 100,
+  });
+  return files.map((f) => f.filename);
+}
+
 export async function branchExists(name: string): Promise<boolean> {
   const octokit = getOctokit();
   const { owner, repo } = getRepo();

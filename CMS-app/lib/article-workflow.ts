@@ -24,6 +24,8 @@ export interface SaveWorkflowResult {
   clearedSignoff?: boolean;
   /** Owner's pending submit-for-approval was reset because they edited it. */
   clearedApproval?: boolean;
+  /** Published flag was reset because the working copy diverged from what shipped. */
+  clearedPublished?: boolean;
 }
 
 /**
@@ -75,13 +77,73 @@ export async function syncArticleWorkflowOnSave(
     clearedApproval = true;
   }
 
+  // An edited article no longer matches what's live on the default branch, so
+  // it shouldn't read as "Published" until it's published again.
+  let clearedPublished = false;
+  if (article.published) {
+    delete article.published;
+    delete article.publishedAt;
+    clearedPublished = true;
+  }
+
   await putFile(
     "content/toc.json",
     JSON.stringify(toc, null, 2),
     `Update ${article.title}${clearedSignoff ? " (sign-off reset)" : ""}`
   );
 
-  return { lastModified, clearedSignoff, clearedApproval };
+  return { lastModified, clearedSignoff, clearedApproval, clearedPublished };
+}
+
+/** Repo content prefix (matches REPO_CONTENT_PREFIX in lib/github.ts). */
+const REPO_CONTENT_PREFIX = "CMS-content/";
+
+/**
+ * From a PR's changed repo paths, return the TOC `file` paths of article
+ * bodies — content-relative (no "content/" prefix), e.g. "help/passport/x.mdx".
+ * Keeps only .mdx/.html/.htm under CMS-content/, dropping toc.json and other
+ * config (by extension), snippets, and images.
+ */
+export function articleFilesFromRepoPaths(repoPaths: string[]): string[] {
+  return repoPaths
+    .filter((p) => p.startsWith(REPO_CONTENT_PREFIX))
+    .map((p) => p.slice(REPO_CONTENT_PREFIX.length))
+    .filter(
+      (p) =>
+        /\.(mdx|html?)$/i.test(p) &&
+        !p.startsWith("snippets/") &&
+        !p.startsWith("images/")
+    );
+}
+
+/**
+ * Mark articles published. Walks the TOC (categories → sections → subsections
+ * + standalone) and sets `published: true` + `publishedAt` on every entry whose
+ * `file` is in `files`. Returns the mutated TOC and the files it matched. Pure
+ * over its inputs apart from mutating the passed TOC's entries — callers pass a
+ * freshly-parsed TOC and write the result back.
+ */
+export function markPublishedInToc(
+  toc: Toc,
+  files: Set<string>,
+  publishedAt: string
+): { toc: Toc; marked: string[] } {
+  const marked: string[] = [];
+  const mark = (a: TocArticle) => {
+    if (files.has(a.file)) {
+      a.published = true;
+      a.publishedAt = publishedAt;
+      marked.push(a.file);
+    }
+  };
+  for (const cat of toc.categories) {
+    for (const sec of cat.sections) {
+      sec.articles.forEach(mark);
+      for (const sub of sec.subsections ?? []) sub.articles.forEach(mark);
+    }
+  }
+  (toc.articles ?? []).forEach(mark);
+  return { toc, marked };
 }
 
 // ── Publish gate ─────────────────────────────────────────────────────────────
