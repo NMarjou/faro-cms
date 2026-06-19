@@ -13,6 +13,7 @@
 import { getFile, putFile } from "./storage";
 import { findTocArticle } from "./server-auth";
 import { ownsArticle } from "./permissions";
+import { subpathToContent } from "./content-paths";
 import type { Toc, TocArticle, TocCategory, TocSection, User } from "./types";
 
 /** Article bodies live as .mdx / .html / .htm; everything else is config/snippets/images. */
@@ -95,19 +96,20 @@ export async function syncArticleWorkflowOnSave(
   return { lastModified, clearedSignoff, clearedApproval, clearedPublished };
 }
 
-/** Repo content prefix (matches REPO_CONTENT_PREFIX in lib/github.ts). */
-const REPO_CONTENT_PREFIX = "CMS-content/";
-
 /**
  * From a PR's changed repo paths, return the TOC `file` paths of article
  * bodies — content-relative (no "content/" prefix), e.g. "help/passport/x.mdx".
- * Keeps only .mdx/.html/.htm under CMS-content/, dropping toc.json and other
- * config (by extension), snippets, and images.
+ * Maps each repo path back through the content-path layer so the project/shared
+ * rooting (CMS-content/projects/<slug>/… and CMS-content/shared/…) is stripped,
+ * then keeps only .mdx/.html/.htm, dropping toc.json/config (by extension),
+ * snippets, and images.
  */
+const REPO_CONTENT_PREFIX = "CMS-content/";
 export function articleFilesFromRepoPaths(repoPaths: string[]): string[] {
   return repoPaths
     .filter((p) => p.startsWith(REPO_CONTENT_PREFIX))
-    .map((p) => p.slice(REPO_CONTENT_PREFIX.length))
+    .map((p) => subpathToContent(p.slice(REPO_CONTENT_PREFIX.length))) // → content/help/x.mdx
+    .map((p) => p.slice("content/".length)) // → help/x.mdx
     .filter(
       (p) =>
         /\.(mdx|html?)$/i.test(p) &&

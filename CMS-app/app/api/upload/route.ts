@@ -5,6 +5,7 @@ import { putFile } from "@/lib/storage";
 import { setImageOwner } from "@/lib/image-meta";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { canManageImages } from "@/lib/permissions";
+import { contentSubpath } from "@/lib/content-paths";
 
 const CONTENT_ROOT = path.resolve(process.cwd(), "..", "CMS-content");
 const isLocal = !process.env.GITHUB_TOKEN;
@@ -37,9 +38,11 @@ export async function POST(request: NextRequest) {
     const filePath = folder ? `images/${folder}/${safeName}` : `images/${safeName}`;
 
     if (isLocal) {
-      const dir = path.dirname(path.join(CONTENT_ROOT, filePath));
+      // filePath is content-relative ("images/…"); route to shared/images/.
+      const diskPath = path.join(CONTENT_ROOT, contentSubpath(filePath));
+      const dir = path.dirname(diskPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(CONTENT_ROOT, filePath), buffer);
+      fs.writeFileSync(diskPath, buffer);
     } else {
       await putFile(
         `content/${filePath}`,

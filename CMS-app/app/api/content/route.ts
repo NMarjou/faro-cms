@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFile, getCachedFile, putFile, deleteFile } from "@/lib/storage";
 import { getRequestUser, canWriteContentPath, forbidden } from "@/lib/server-auth";
 import { syncArticleWorkflowOnSave } from "@/lib/article-workflow";
+import { contentSubpath } from "@/lib/content-paths";
 
 // Small metadata files the editor reads on every article open. Caching
 // these via getCachedFile means hundreds of editor opens share one read;
@@ -32,7 +33,8 @@ export async function GET(request: NextRequest) {
       const fs = await import("fs");
       const nodePath = await import("path");
       const CONTENT_ROOT = nodePath.resolve(process.cwd(), "..", "CMS-content");
-      const fullPath = nodePath.join(CONTENT_ROOT, path);
+      // Route through the project/shared layout (e.g. images/ → shared/images/).
+      const fullPath = nodePath.join(CONTENT_ROOT, contentSubpath(path));
       if (!fs.existsSync(fullPath)) {
         return NextResponse.json({ error: "File not found" }, { status: 404 });
       }

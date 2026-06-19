@@ -1,22 +1,22 @@
 import { Octokit } from "octokit";
 import type { GitHubFile, GitHubTreeItem } from "./types";
+import { contentSubpathFromApp, subpathToContent } from "./content-paths";
 
 // Content in the GitHub repo lives under CMS-content/, but the app addresses
-// it as content/. Map between the two at the octokit boundary so callers
-// (and the local-fs backend) can share a single path shape.
+// it as content/. Within CMS-content the layout is split into shared/ and
+// projects/<slug>/ — lib/content-paths.ts owns that rooting, so callers keep
+// using flat `content/...` app paths and the translation happens only here.
 export const REPO_CONTENT_PREFIX = "CMS-content/";
 const APP_CONTENT_PREFIX = "content/";
 
 export function toRepoPath(appPath: string): string {
-  return appPath.startsWith(APP_CONTENT_PREFIX)
-    ? REPO_CONTENT_PREFIX + appPath.slice(APP_CONTENT_PREFIX.length)
-    : appPath;
+  if (!appPath.startsWith(APP_CONTENT_PREFIX)) return appPath;
+  return REPO_CONTENT_PREFIX + contentSubpathFromApp(appPath);
 }
 
 export function fromRepoPath(repoPath: string): string {
-  return repoPath.startsWith(REPO_CONTENT_PREFIX)
-    ? APP_CONTENT_PREFIX + repoPath.slice(REPO_CONTENT_PREFIX.length)
-    : repoPath;
+  if (!repoPath.startsWith(REPO_CONTENT_PREFIX)) return repoPath;
+  return subpathToContent(repoPath.slice(REPO_CONTENT_PREFIX.length));
 }
 
 function getOctokit() {

@@ -136,6 +136,28 @@ export interface UsersData {
   users: User[];
 }
 
+// ── Projects ──
+// Multi-project manifest (CMS-content/projects.json). Each project owns its own
+// toc.json + articles under projects/<slug>/; assets are shared via the pool
+// (see lib/content-paths.ts). `publishTarget` is a placeholder for per-project
+// output config wired in a later phase.
+
+export interface Project {
+  slug: string;
+  name: string;
+  description?: string;
+  /** The default project content resolves to today (single-project phase). */
+  default?: boolean;
+  publishTarget?: {
+    baseBranch?: string;
+    workingBranch?: string;
+  };
+}
+
+export interface ProjectsData {
+  projects: Project[];
+}
+
 /** Seed list shown when CMS-content/users.json doesn't exist yet. */
 export const DEFAULT_USERS: User[] = [
   { email: "nolwenn.marjou@beqom.com", role: "tech-writer", name: "Nolwenn Marjou" },
