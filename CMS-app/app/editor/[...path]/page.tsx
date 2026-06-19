@@ -371,13 +371,12 @@ export default function EditorPage() {
     }
     await handleSave();
     try {
-      const res = await fetch("/api/publish", {
+      // Per-article publish: opens an isolated PR with just this article's body
+      // and its TOC entry, so it ships independently of other in-flight work.
+      const res = await fetch("/api/publish/article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `Update: ${articleMeta?.title || filePath}`,
-          description: `Content update for ${filePath}`,
-        }),
+        body: JSON.stringify({ path: filePath }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Publish failed"); }
       const data = await res.json();

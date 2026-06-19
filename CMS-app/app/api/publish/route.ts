@@ -10,6 +10,7 @@ import {
 import { getFile } from "@/lib/storage";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { canPublish } from "@/lib/permissions";
+import { articleOwesSignoff } from "@/lib/article-workflow";
 import type { Toc, TocArticle } from "@/lib/types";
 
 /**
@@ -37,12 +38,7 @@ function collectArticles(toc: Toc): TocArticle[] {
 
 function findBlockingArticles(toc: Toc): Array<{ file: string; title: string }> {
   return collectArticles(toc)
-    .filter((a) => {
-      if (a.reviewComplete === true) return false;
-      const inContributorReview = (a.assignedTo?.length ?? 0) > 0;
-      const awaitingApproval = a.approvalStatus === "submitted";
-      return inContributorReview || awaitingApproval;
-    })
+    .filter(articleOwesSignoff)
     .map((a) => ({ file: a.file, title: a.title }));
 }
 

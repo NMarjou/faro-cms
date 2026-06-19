@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Toc, TocCategory } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { canPublish } from "@/lib/permissions";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 interface CompiledArticle {
@@ -51,6 +52,12 @@ export default function PublishPage() {
   const [result, setResult] = useState<CompileResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedPreview, setExpandedPreview] = useState<Set<string>>(new Set());
+  // "Publish all" — branch-wide PR (working branch → main) for shared resources
+  // (snippets/variables/glossary/images/TOC structure) and bulk releases.
+  // Per-article publishing happens from the editor; this ships everything else.
+  const [publishingAll, setPublishingAll] = useState(false);
+  const [publishAllUrl, setPublishAllUrl] = useState<string | null>(null);
+  const [publishAllMsg, setPublishAllMsg] = useState<string | null>(null);
 
   useEffect(() => {
     // Load TOC
@@ -161,6 +168,31 @@ export default function PublishPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handlePublishAll = async () => {
+    setPublishingAll(true);
+    setPublishAllMsg(null);
+    setPublishAllUrl(null);
+    try {
+      const res = await fetch("/api/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Publish all pending changes",
+          description: "Branch-wide content update from the CMS editor.",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Publish failed");
+      }
+      setPublishAllUrl(data.prUrl);
+    } catch (err) {
+      setPublishAllMsg(err instanceof Error ? err.message : "Publish failed");
+    } finally {
+      setPublishingAll(false);
+    }
+  };
+
   const togglePreview = (slug: string) => {
     setExpandedPreview((prev) => {
       const next = new Set(prev);
@@ -183,6 +215,16 @@ export default function PublishPage() {
               Download Bundle
             </button>
           )}
+          {canPublish(role) && (
+            <button
+              className="btn"
+              disabled={publishingAll}
+              onClick={handlePublishAll}
+              title="Open a PR with every pending change on the working branch — shared resources (snippets, variables, glossary, images, TOC structure) and bulk releases. Individual articles publish from the editor."
+            >
+              {publishingAll ? "Opening PR…" : "Publish all pending"}
+            </button>
+          )}
           <button
             className="btn btn-primary"
             disabled={compiling || selected.size === 0}
@@ -196,6 +238,20 @@ export default function PublishPage() {
         <p style={{ color: "var(--fg-muted)", marginBottom: 16, fontSize: 14 }}>
           Select which categories to compile for publication. Articles will be compiled with all snippets and variables resolved to their final values.
         </p>
+
+        {publishAllUrl && (
+          <div style={{ background: "var(--success-light, var(--info-light))", color: "var(--success, var(--info))", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>
+            Opened a publish PR for all pending changes.{" "}
+            <a href={publishAllUrl} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>
+              View PR
+            </a>
+          </div>
+        )}
+        {publishAllMsg && (
+          <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>
+            {publishAllMsg}
+          </div>
+        )}
 
         {loading && <p>Loading...</p>}
 
