@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { ConditionsConfig, User, UserRole } from "@/lib/types";
+import type { ConditionsConfig, Project, User, UserRole } from "@/lib/types";
 import Icon from "@/components/Icon";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
@@ -36,6 +36,73 @@ export default function PlatformSettingsPage() {
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserName, setNewUserName] = useState("");
   const [newUserRole, setNewUserRole] = useState<UserRole>("contributor");
+
+  // Projects state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [projBusy, setProjBusy] = useState(false);
+  const [projMsg, setProjMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/projects")
+      .then((r) => (r.ok ? r.json() : { projects: [] }))
+      .then((d: { projects?: Project[] }) => setProjects(d.projects || []))
+      .catch(() => {});
+  }, []);
+
+  const refreshProjects = () =>
+    fetch("/api/projects")
+      .then((r) => (r.ok ? r.json() : { projects: [] }))
+      .then((d: { projects?: Project[] }) => setProjects(d.projects || []))
+      .catch(() => {});
+
+  const createProject = async () => {
+    const name = newProjectName.trim();
+    if (!name) return;
+    setProjBusy(true);
+    setProjMsg(null);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Failed to create project");
+      setNewProjectName("");
+      await refreshProjects();
+      setProjMsg(`Created “${name}”. Switch to it from the sidebar.`);
+    } catch (e) {
+      setProjMsg(e instanceof Error ? e.message : "Failed to create project");
+    } finally {
+      setProjBusy(false);
+    }
+  };
+
+  const renameProject = async (slug: string, current: string) => {
+    const name = window.prompt("Rename project", current)?.trim();
+    if (!name || name === current) return;
+    setProjMsg(null);
+    const res = await fetch("/api/projects", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, name }),
+    });
+    if (res.ok) await refreshProjects();
+    else setProjMsg((await res.json().catch(() => ({}))).error || "Rename failed");
+  };
+
+  const deleteProject = async (slug: string, name: string) => {
+    if (!window.confirm(`Remove project “${name}” from the list? Its files are left in place.`)) return;
+    setProjMsg(null);
+    const res = await fetch("/api/projects", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    });
+    if (res.ok) await refreshProjects();
+    else setProjMsg((await res.json().catch(() => ({}))).error || "Delete failed");
+  };
 
   useEffect(() => {
     // Load conditions
@@ -215,6 +282,60 @@ export default function PlatformSettingsPage() {
         <h1>Platform Settings</h1>
       </header>
       <div className="main-body">
+        {/* Projects */}
+        <div className="card" style={{ maxWidth: 600, marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 4 }}>Projects</h2>
+          <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 12 }}>
+            Each project has its own table of contents and articles; images, snippets, styles
+            and variables are shared across all projects. Switch the active project from the sidebar.
+          </p>
+          <div style={{ marginBottom: 12 }}>
+            {projects.map((p) => (
+              <div
+                key={p.slug}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "8px 0",
+                  borderTop: "1px solid var(--border)",
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 500, fontSize: 14 }}>{p.name}</span>
+                  <span style={{ fontSize: 12, color: "var(--fg-muted)", marginLeft: 8 }}>{p.slug}</span>
+                  {p.default && <span className="badge" style={{ marginLeft: 8 }}>default</span>}
+                </div>
+                <button className="btn btn-sm" onClick={() => renameProject(p.slug, p.name)}>Rename</button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => deleteProject(p.slug, p.name)}
+                  disabled={p.default || projects.length <= 1}
+                  title={p.default ? "Can't delete the default project" : "Remove from list"}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              className="input"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") createProject(); }}
+              placeholder="New project name"
+              style={{ flex: 1, maxWidth: 280, fontSize: 14 }}
+            />
+            <button className="btn btn-primary btn-sm" onClick={createProject} disabled={projBusy || !newProjectName.trim()}>
+              {projBusy ? "Creating…" : "Create project"}
+            </button>
+          </div>
+          {projMsg && (
+            <p style={{ fontSize: 13, color: "var(--fg-muted)", marginTop: 10 }}>{projMsg}</p>
+          )}
+        </div>
+
         {/* Editor Stylesheet */}
         <div className="card" style={{ maxWidth: 800 }}>
           <h2 style={{ fontSize: 16, marginBottom: 4 }}>Editor Stylesheet</h2>

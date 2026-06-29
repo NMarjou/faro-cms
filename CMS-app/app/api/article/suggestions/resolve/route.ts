@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile, putFile } from "@/lib/storage";
 import { mutateJsonFile } from "@/lib/sidecar";
 import {
@@ -62,6 +63,7 @@ function replaceNthOccurrence(
 }
 
 export async function POST(request: NextRequest) {
+  setRequestProject(request);
   const caller = await getRequestUser(request);
   if (!isTechWriter(caller?.role ?? null)) return forbidden();
   try {

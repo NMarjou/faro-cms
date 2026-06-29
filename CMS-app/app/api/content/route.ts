@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile, getCachedFile, putFile, deleteFile } from "@/lib/storage";
 import { getRequestUser, canWriteContentPath, forbidden } from "@/lib/server-auth";
 import { syncArticleWorkflowOnSave } from "@/lib/article-workflow";
@@ -19,6 +20,7 @@ const CACHE_HEADERS = {
 };
 
 export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const path = request.nextUrl.searchParams.get("path");
   const ref = request.nextUrl.searchParams.get("ref") || undefined;
   const raw = request.nextUrl.searchParams.get("raw");
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  setRequestProject(request);
   try {
     const body = await request.json();
     const { path, content, message, branch, sha } = body;
@@ -94,6 +97,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  setRequestProject(request);
   try {
     const body = await request.json();
     const { path, message, branch } = body;

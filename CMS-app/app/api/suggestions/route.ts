@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile } from "@/lib/storage";
 import type { Suggestion, SuggestionsData, Toc, TocArticle } from "@/lib/types";
 
@@ -55,7 +56,8 @@ function sidecarPath(articleFile: string): string {
   return `content/${trimmed}.suggestions.json`;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  setRequestProject(request);
   let toc: Toc;
   try {
     const tocFile = await getFile("content/toc.json");

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile } from "@/lib/storage";
 import type { Toc, QAIssue, TocSection } from "@/lib/types";
 import { getSpellChecker } from "@/lib/spell-checker";
@@ -50,7 +51,8 @@ function extractWords(text: string): string[] {
 }
 
 // ─── QA Route ───────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const issues: QAIssue[] = [];
 
   try {

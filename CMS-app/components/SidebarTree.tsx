@@ -9,6 +9,7 @@ import { useTheme } from "./ThemeProvider";
 import FaroLogo from "./FaroLogo";
 import Icon from "./Icon";
 import { useCurrentUser } from "./CurrentUserProvider";
+import { useCurrentProject } from "./CurrentProjectProvider";
 import { isTechWriter, canManageImages } from "@/lib/permissions";
 
 type CreatingAt =
@@ -22,6 +23,7 @@ export default function SidebarTree() {
   const pathname = usePathname();
   const router = useRouter();
   const { role } = useCurrentUser();
+  const { project, projects, setProject } = useCurrentProject();
   // Tech-writer-only tooling (structure editing, snippets, images, variables,
   // publish, import, QA, review queue, platform settings). Authors and
   // contributors both see the limited shell — authors create articles from the
@@ -559,6 +561,26 @@ export default function SidebarTree() {
         </div>
         )}
       </div>
+
+      {/* Project switcher — scopes all content to the selected project. */}
+      {projects.length > 0 && (
+        <div style={{ padding: "0 12px 8px" }}>
+          <label style={{ fontSize: 11, color: "var(--fg-muted)", display: "block", marginBottom: 4 }}>
+            Project
+          </label>
+          <select
+            className="input"
+            value={project || ""}
+            onChange={(e) => { if (e.target.value !== project) setProject(e.target.value); }}
+            style={{ width: "100%", fontSize: 13 }}
+            title="Switch project"
+          >
+            {projects.map((p) => (
+              <option key={p.slug} value={p.slug}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="sidebar-tree">
         {/* Dashboard */}

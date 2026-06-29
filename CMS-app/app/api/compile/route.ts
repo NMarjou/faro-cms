@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile } from "@/lib/storage";
 import { getToc, getAllArticlesFromToc } from "@/lib/content";
 import { compileArticle, createSnippetCache } from "@/lib/compile";
@@ -44,6 +45,7 @@ interface CompiledCategory {
  * By categories:    { categories: ["help", "apis"], ref?: string }
  */
 export async function POST(request: NextRequest) {
+  setRequestProject(request);
   try {
     const body = await request.json();
     const { path, all, categories: categorySlugs, ref, activeTags } = body;

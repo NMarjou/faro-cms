@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile, putFile, listFilesRecursive } from "@/lib/storage";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
@@ -98,7 +99,8 @@ function isInternalLink(href: string): boolean {
 }
 
 // ─── GET: Scan all articles for unresolved links ────────────────────
-export async function GET() {
+export async function GET(request: NextRequest) {
+  setRequestProject(request);
   try {
     const tocFile = await getFile("content/toc.json");
     const toc: Toc = JSON.parse(tocFile.content);
@@ -200,6 +202,7 @@ export async function GET() {
 
 // ─── POST: Apply link mappings ──────────────────────────────────────
 export async function POST(request: NextRequest) {
+  setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

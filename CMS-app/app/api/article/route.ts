@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import { getFile } from "@/lib/storage";
 import matter from "gray-matter";
 
@@ -7,6 +8,7 @@ import matter from "gray-matter";
  * Returns article content. Detects format by extension and content.
  */
 export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const filePath = request.nextUrl.searchParams.get("path");
   if (!filePath) {
     return NextResponse.json({ error: "path is required" }, { status: 400 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setRequestProject } from "@/lib/request-context";
 import {
   createBranch,
   createPR,
@@ -43,6 +44,7 @@ function findBlockingArticles(toc: Toc): Array<{ file: string; title: string }> 
 }
 
 export async function POST(request: NextRequest) {
+  setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canPublish(user?.role ?? null)) return forbidden("Only tech writers can publish");
   try {
