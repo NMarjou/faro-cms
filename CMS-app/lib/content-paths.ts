@@ -55,6 +55,30 @@ export type ContentScope = "platform" | "shared" | "project";
 /** Shared asset directories (matched as the dir itself or any path under it). */
 const SHARED_DIRS = ["snippets", "images"];
 
+/**
+ * Shared dirs that support per-project override (Phase 1): a `content/<rel>`
+ * under one of these resolves to `projects/<slug>/<rel>` when that file exists,
+ * otherwise to `shared/<rel>`. Snippets first; images follow (they also need
+ * their `.metadata.json` entries forked). The existence probe + fallback lives
+ * in the storage layer (it's async); `classify()` here stays override-blind.
+ */
+export const OVERRIDABLE_DIRS = ["snippets"];
+
+/** Whether `rel` is under an override-capable shared dir. */
+export function isOverridable(rel: string): boolean {
+  return OVERRIDABLE_DIRS.some((d) => rel === d || rel.startsWith(`${d}/`));
+}
+
+/** Physical sub-path of the shared copy of a content-relative path. */
+export function sharedSubpath(rel: string): string {
+  return `${SHARED_DIR}/${rel}`;
+}
+
+/** Physical sub-path of a project-local override of a content-relative path. */
+export function projectSubpath(rel: string, slug: string = currentProjectSlug()): string {
+  return `${PROJECTS_DIR}/${slug}/${rel}`;
+}
+
 /** Where a content-relative path (no leading `content/`) belongs. */
 export function classify(rel: string): ContentScope {
   if (PLATFORM_FILES.has(rel)) return "platform";

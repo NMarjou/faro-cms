@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
+import { currentProjectSlug } from "@/lib/content-paths";
 import { getCachedFile, listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
 import { memoize } from "@/lib/cache";
 
@@ -46,7 +47,7 @@ async function loadVariables(): Promise<Record<string, string>> {
 }
 
 async function loadSnippetNames(): Promise<string[]> {
-  return memoize(`${SNIPPETS_LIST_PREFIX}meta`, async () => {
+  return memoize(`${SNIPPETS_LIST_PREFIX}${currentProjectSlug()}:meta`, async () => {
     const files = await listFilesRecursive("content/snippets");
     return files
       .filter((f) => f.endsWith(".mdx") || f.endsWith(".html"))
