@@ -1,0 +1,10 @@
+{
+  "projects": [
+    {
+      "slug": "accelerate",
+      "name": "Accelerate",
+      "description": "beqom product knowledge base",
+      "default": true
+    }
+  ]
+}

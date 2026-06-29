@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { putFile, getFile } from "@/lib/storage";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
+import { contentSubpath } from "@/lib/content-paths";
 import type { Toc, TocCategory, TocSection, TocArticle, VariableSetsData } from "@/lib/types";
 import mammoth from "mammoth";
 import { marked } from "marked";
@@ -593,9 +594,11 @@ export async function POST(request: NextRequest) {
           const buffer = Buffer.from(file.content, "base64");
 
           if (isLocal) {
-            const dir = nodePath.dirname(nodePath.join(CONTENT_ROOT, imgPath));
+            // imgPath is content-relative ("images/…"); route to shared/images/.
+            const diskPath = nodePath.join(CONTENT_ROOT, contentSubpath(imgPath));
+            const dir = nodePath.dirname(diskPath);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(nodePath.join(CONTENT_ROOT, imgPath), buffer);
+            fs.writeFileSync(diskPath, buffer);
           } else {
             await putFile(
               `content/${imgPath}`,

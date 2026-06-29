@@ -6,8 +6,14 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { GitHubFile } from "./types";
+import { contentSubpathFromApp } from "./content-paths";
 
 const CONTENT_ROOT = path.resolve(process.cwd(), "..", "CMS-content");
+
+/** Map an app `content/<rel>` path to its sub-path under CMS-content/. */
+function diskSubpath(appPath: string): string {
+  return contentSubpathFromApp(appPath);
+}
 
 function ensureContentDir() {
   if (!fs.existsSync(CONTENT_ROOT)) {
@@ -16,7 +22,7 @@ function ensureContentDir() {
 }
 
 export async function getFile(filePath: string): Promise<GitHubFile> {
-  const fullPath = path.join(CONTENT_ROOT, filePath.replace(/^content\//, ""));
+  const fullPath = path.join(CONTENT_ROOT, diskSubpath(filePath));
   if (!fs.existsSync(fullPath)) {
     throw new Error(`File not found: ${fullPath}`);
   }
@@ -34,7 +40,7 @@ export async function putFile(
   content: string
 ): Promise<{ sha: string; commitSha: string }> {
   ensureContentDir();
-  const fullPath = path.join(CONTENT_ROOT, filePath.replace(/^content\//, ""));
+  const fullPath = path.join(CONTENT_ROOT, diskSubpath(filePath));
   const dir = path.dirname(fullPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -44,14 +50,14 @@ export async function putFile(
 }
 
 export async function deleteFile(filePath: string): Promise<void> {
-  const fullPath = path.join(CONTENT_ROOT, filePath.replace(/^content\//, ""));
+  const fullPath = path.join(CONTENT_ROOT, diskSubpath(filePath));
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath);
   }
 }
 
 export async function listFiles(dirPath: string): Promise<string[]> {
-  const fullPath = path.join(CONTENT_ROOT, dirPath.replace(/^content\//, ""));
+  const fullPath = path.join(CONTENT_ROOT, diskSubpath(dirPath));
   if (!fs.existsSync(fullPath)) return [];
   return fs
     .readdirSync(fullPath)
@@ -59,7 +65,7 @@ export async function listFiles(dirPath: string): Promise<string[]> {
 }
 
 export async function listFilesRecursive(dirPath: string): Promise<string[]> {
-  const fullPath = path.join(CONTENT_ROOT, dirPath.replace(/^content\//, ""));
+  const fullPath = path.join(CONTENT_ROOT, diskSubpath(dirPath));
   if (!fs.existsSync(fullPath)) return [];
   const results: string[] = [];
   function walk(dir: string, relDir: string) {
