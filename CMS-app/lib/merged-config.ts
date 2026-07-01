@@ -11,7 +11,11 @@
  */
 
 import { getCachedFile, readProjectOverlay } from "./storage";
-import type { Variables, VariableSet, VariableSetsData, Glossary, GlossaryTerm } from "./types";
+import type {
+  Variables, VariableSet, VariableSetsData,
+  Glossary, GlossaryTerm,
+  ConditionsConfig,
+} from "./types";
 
 /** Per-set, per-key origin so the manager can badge shared vs project. */
 export type VariableScopes = Record<string, Record<string, "shared" | "project">>;
@@ -150,4 +154,53 @@ export async function loadMergedGlossary(
   const overlayFile = await readProjectOverlay("glossary.json");
   const overlay = overlayFile ? toGlossary(overlayFile.content) : null;
   return mergeGlossary(shared, overlay);
+}
+
+// ── Conditions (tag union + per-tag colors) ─────────────────────────────────
+
+/** Per-tag origin so the manager can badge shared vs project. */
+export type ConditionScopes = Record<string, "shared" | "project">;
+
+/**
+ * Merge a sparse project overlay over the shared conditions. Tags are unioned
+ * (shared order preserved, project-only tags appended); colors overlay per tag.
+ * A tag is project-scoped when it's project-only OR its color is overridden.
+ * (The overlay can add tags and recolor shared ones — it can't hide a shared
+ * tag, consistent with the other merge types.)
+ */
+export function mergeConditions(
+  shared: ConditionsConfig,
+  overlay: ConditionsConfig | null
+): { merged: ConditionsConfig; scopes: ConditionScopes } {
+  const sharedTags = shared.tags ?? [];
+  const ovTags = overlay?.tags ?? [];
+  const ovColors = overlay?.colors ?? {};
+  const tags = [...sharedTags];
+  for (const t of ovTags) if (!tags.includes(t)) tags.push(t);
+  const colors = { ...(shared.colors ?? {}), ...ovColors };
+  const scopes: ConditionScopes = {};
+  const ovTagSet = new Set(ovTags);
+  for (const t of tags) scopes[t] = ovTagSet.has(t) || t in ovColors ? "project" : "shared";
+  return { merged: { tags, colors }, scopes };
+}
+
+function toConditions(content: string): ConditionsConfig {
+  const data = JSON.parse(content);
+  return {
+    tags: Array.isArray(data?.tags) ? (data.tags as string[]) : [],
+    colors: data?.colors && typeof data.colors === "object" ? (data.colors as Record<string, string>) : {},
+  };
+}
+
+/** Merged conditions for the current project (shared + overlay) with scopes. */
+export async function loadMergedConditions(
+  ref?: string
+): Promise<{ merged: ConditionsConfig; scopes: ConditionScopes }> {
+  let shared: ConditionsConfig = { tags: [], colors: {} };
+  try {
+    shared = toConditions((await getCachedFile("content/conditions.json", ref)).content);
+  } catch { /* none yet */ }
+  const overlayFile = await readProjectOverlay("conditions.json");
+  const overlay = overlayFile ? toConditions(overlayFile.content) : null;
+  return mergeConditions(shared, overlay);
 }

@@ -12,7 +12,7 @@ import type {
   SearchEntry,
 } from "./types";
 import { getFile } from "./storage";
-import { loadMergedVariablesFlat } from "./merged-config";
+import { loadMergedVariablesFlat, loadMergedConditions } from "./merged-config";
 
 const CONTENT_BASE = "content";
 
@@ -132,9 +132,10 @@ export async function getVariables(ref?: string): Promise<Variables> {
 // ── Conditions ──
 
 export async function getConditions(ref?: string): Promise<ConditionsConfig> {
+  // Merges the current project's overlay over shared, so conditional filtering
+  // during compile/publish honors the project's tags.
   try {
-    const file = await getFile(`${CONTENT_BASE}/conditions.json`, ref);
-    return JSON.parse(file.content);
+    return (await loadMergedConditions(ref)).merged;
   } catch {
     return { tags: [] };
   }
