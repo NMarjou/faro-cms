@@ -1,12 +1,18 @@
 /**
  * Local filesystem backend for development.
  * Reads/writes content files directly from disk instead of GitHub API.
+ *
+ * The core functions are addressed by a CMS-content-relative *subpath* (e.g.
+ * `shared/snippets/x.mdx` or `projects/accelerate/toc.json`). The app-path
+ * wrappers (`getFile`, …) map `content/<rel>` → subpath via content-paths and
+ * delegate. The storage layer resolves per-project overrides and calls the
+ * `*At` functions directly with the already-resolved physical subpath.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import type { GitHubFile } from "./types";
-import { contentSubpathFromApp } from "./content-paths";
+import { contentSubpathFromApp, subpathToContent } from "./content-paths";
 
 const CONTENT_ROOT = path.resolve(process.cwd(), "..", "CMS-content");
 
@@ -21,26 +27,27 @@ function ensureContentDir() {
   }
 }
 
-export async function getFile(filePath: string): Promise<GitHubFile> {
-  const fullPath = path.join(CONTENT_ROOT, diskSubpath(filePath));
+// ── Subpath-addressed core (CMS-content-relative) ──
+
+export async function existsAt(sub: string): Promise<boolean> {
+  return fs.existsSync(path.join(CONTENT_ROOT, sub));
+}
+
+export async function getFileAt(sub: string): Promise<GitHubFile> {
+  const fullPath = path.join(CONTENT_ROOT, sub);
   if (!fs.existsSync(fullPath)) {
     throw new Error(`File not found: ${fullPath}`);
   }
   const content = fs.readFileSync(fullPath, "utf-8");
-  return {
-    path: filePath,
-    content,
-    sha: "",
-    encoding: "utf-8",
-  };
+  return { path: subpathToContent(sub), content, sha: "", encoding: "utf-8" };
 }
 
-export async function putFile(
-  filePath: string,
+export async function putFileAt(
+  sub: string,
   content: string
 ): Promise<{ sha: string; commitSha: string }> {
   ensureContentDir();
-  const fullPath = path.join(CONTENT_ROOT, diskSubpath(filePath));
+  const fullPath = path.join(CONTENT_ROOT, sub);
   const dir = path.dirname(fullPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -49,36 +56,59 @@ export async function putFile(
   return { sha: "", commitSha: "" };
 }
 
-export async function deleteFile(filePath: string): Promise<void> {
-  const fullPath = path.join(CONTENT_ROOT, diskSubpath(filePath));
+export async function deleteFileAt(sub: string): Promise<void> {
+  const fullPath = path.join(CONTENT_ROOT, sub);
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath);
   }
 }
 
-export async function listFiles(dirPath: string): Promise<string[]> {
-  const fullPath = path.join(CONTENT_ROOT, diskSubpath(dirPath));
+export async function listFilesAt(sub: string): Promise<string[]> {
+  const fullPath = path.join(CONTENT_ROOT, sub);
   if (!fs.existsSync(fullPath)) return [];
-  return fs
-    .readdirSync(fullPath)
-    .map((f) => path.join(dirPath, f));
+  return fs.readdirSync(fullPath).map((f) => subpathToContent(`${sub}/${f}`));
 }
 
-export async function listFilesRecursive(dirPath: string): Promise<string[]> {
-  const fullPath = path.join(CONTENT_ROOT, diskSubpath(dirPath));
+export async function listFilesRecursiveAt(sub: string): Promise<string[]> {
+  const fullPath = path.join(CONTENT_ROOT, sub);
   if (!fs.existsSync(fullPath)) return [];
   const results: string[] = [];
-  function walk(dir: string, relDir: string) {
+  function walk(dir: string, relSub: string) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const rel = path.join(relDir, entry.name);
+      const childSub = `${relSub}/${entry.name}`;
       if (entry.isDirectory()) {
-        walk(path.join(dir, entry.name), rel);
+        walk(path.join(dir, entry.name), childSub);
       } else {
-        results.push(rel);
+        results.push(subpathToContent(childSub));
       }
     }
   }
-  walk(fullPath, dirPath);
+  walk(fullPath, sub);
   return results;
+}
+
+// ── App-path wrappers (content/<rel>) — delegate through the path mapper ──
+
+export async function getFile(filePath: string): Promise<GitHubFile> {
+  return getFileAt(diskSubpath(filePath));
+}
+
+export async function putFile(
+  filePath: string,
+  content: string
+): Promise<{ sha: string; commitSha: string }> {
+  return putFileAt(diskSubpath(filePath), content);
+}
+
+export async function deleteFile(filePath: string): Promise<void> {
+  return deleteFileAt(diskSubpath(filePath));
+}
+
+export async function listFiles(dirPath: string): Promise<string[]> {
+  return listFilesAt(diskSubpath(dirPath));
+}
+
+export async function listFilesRecursive(dirPath: string): Promise<string[]> {
+  return listFilesRecursiveAt(diskSubpath(dirPath));
 }

@@ -1,6 +1,7 @@
 import { Octokit } from "octokit";
 import type { GitHubFile, GitHubTreeItem } from "./types";
 import { contentSubpathFromApp, subpathToContent } from "./content-paths";
+import { memoize, invalidatePrefix } from "./cache";
 
 // Content in the GitHub repo lives under CMS-content/, but the app addresses
 // it as content/. Within CMS-content the layout is split into shared/ and
@@ -83,61 +84,95 @@ export function ensureWorkingBranch(): Promise<void> {
   return ensurePromise;
 }
 
-// ── Read operations ──
+// ── Read operations (subpath-addressed core; CMS-content-relative) ──
 
-export async function getFile(
-  path: string,
-  ref?: string
-): Promise<GitHubFile> {
+/** Repo path (CMS-content/…) for a CMS-content-relative subpath. */
+function repoPathForSub(sub: string): string {
+  return REPO_CONTENT_PREFIX + sub;
+}
+
+export async function getFileAt(sub: string, ref?: string): Promise<GitHubFile> {
   if (!ref) await ensureWorkingBranch();
   const octokit = getOctokit();
   const { owner, repo } = getRepo();
   const { data } = await octokit.rest.repos.getContent({
     owner,
     repo,
-    path: toRepoPath(path),
+    path: repoPathForSub(sub),
     ref: ref || workingBranch(),
   });
   if (Array.isArray(data) || data.type !== "file") {
-    throw new Error(`Path ${path} is not a file`);
+    throw new Error(`Path ${sub} is not a file`);
   }
   const content = Buffer.from(data.content, "base64").toString("utf-8");
-  return { path: fromRepoPath(data.path), content, sha: data.sha, encoding: "utf-8" };
+  return { path: subpathToContent(sub), content, sha: data.sha, encoding: "utf-8" };
 }
 
-export async function listFiles(path: string, ref?: string): Promise<string[]> {
+export async function listFilesAt(sub: string, ref?: string): Promise<string[]> {
   if (!ref) await ensureWorkingBranch();
   const octokit = getOctokit();
   const { owner, repo } = getRepo();
   const { data } = await octokit.rest.repos.getContent({
     owner,
     repo,
-    path: toRepoPath(path),
+    path: repoPathForSub(sub),
     ref: ref || workingBranch(),
   });
   if (!Array.isArray(data)) {
-    throw new Error(`Path ${path} is not a directory`);
+    throw new Error(`Path ${sub} is not a directory`);
   }
   return data.map((item: { path: string }) => fromRepoPath(item.path));
 }
 
-export async function getTree(ref?: string): Promise<GitHubTreeItem[]> {
-  if (!ref) await ensureWorkingBranch();
-  const octokit = getOctokit();
-  const { owner, repo } = getRepo();
-  const { data } = await octokit.rest.git.getTree({
-    owner,
-    repo,
-    tree_sha: ref || workingBranch(),
-    recursive: "true",
-  });
-  return data.tree as GitHubTreeItem[];
+/** Whether a blob exists at `sub` (uses the memoized tree). */
+export async function existsAt(sub: string, ref?: string): Promise<boolean> {
+  const target = repoPathForSub(sub);
+  const tree = await getTree(ref);
+  return tree.some((item) => item.type === "blob" && item.path === target);
 }
 
-// ── Write operations ──
+/** App `content/<rel>` paths of every blob under `sub` (uses the memoized tree). */
+export async function listFilesRecursiveAt(sub: string, ref?: string): Promise<string[]> {
+  const prefix = repoPathForSub(sub);
+  const tree = await getTree(ref);
+  return tree
+    .filter((item) => item.type === "blob" && item.path.startsWith(prefix))
+    .map((item) => fromRepoPath(item.path));
+}
 
-export async function putFile(
-  path: string,
+// getTree is recursive and whole-repo; memoize it so override existence probes
+// (one per uncached read) don't each cost a tree fetch. Writes invalidate the
+// `tree:` prefix so a freshly forked/removed override is seen immediately.
+const TREE_TTL_MS = 60_000;
+
+export async function getTree(ref?: string): Promise<GitHubTreeItem[]> {
+  const treeSha = ref || workingBranch();
+  return memoize(
+    `tree:${treeSha}`,
+    async () => {
+      if (!ref) await ensureWorkingBranch();
+      const octokit = getOctokit();
+      const { owner, repo } = getRepo();
+      const { data } = await octokit.rest.git.getTree({
+        owner,
+        repo,
+        tree_sha: treeSha,
+        recursive: "true",
+      });
+      return data.tree as GitHubTreeItem[];
+    },
+    TREE_TTL_MS
+  );
+}
+
+function invalidateTreeCache(): void {
+  invalidatePrefix("tree:");
+}
+
+// ── Write operations (subpath-addressed core) ──
+
+export async function putFileAt(
+  sub: string,
   content: string,
   message: string,
   branch?: string,
@@ -151,7 +186,7 @@ export async function putFile(
   let fileSha = sha;
   if (!fileSha) {
     try {
-      const existing = await getFile(path, branch || workingBranch());
+      const existing = await getFileAt(sub, branch || workingBranch());
       fileSha = existing.sha;
     } catch {
       // File doesn't exist yet, that's fine
@@ -161,17 +196,58 @@ export async function putFile(
   const { data } = await octokit.rest.repos.createOrUpdateFileContents({
     owner,
     repo,
-    path: toRepoPath(path),
+    path: repoPathForSub(sub),
     message,
     content: Buffer.from(content).toString("base64"),
     branch: branch || workingBranch(),
     ...(fileSha ? { sha: fileSha } : {}),
   });
 
+  invalidateTreeCache();
   return {
     sha: data.content?.sha || "",
     commitSha: data.commit.sha || "",
   };
+}
+
+export async function deleteFileAt(
+  sub: string,
+  message: string,
+  branch?: string
+): Promise<void> {
+  if (!branch) await ensureWorkingBranch();
+  const octokit = getOctokit();
+  const { owner, repo } = getRepo();
+  const file = await getFileAt(sub, branch || workingBranch());
+  await octokit.rest.repos.deleteFile({
+    owner,
+    repo,
+    path: repoPathForSub(sub),
+    message,
+    sha: file.sha,
+    branch: branch || workingBranch(),
+  });
+  invalidateTreeCache();
+}
+
+// ── App-path wrappers (content/<rel>) — delegate through the path mapper ──
+
+export async function getFile(path: string, ref?: string): Promise<GitHubFile> {
+  return getFileAt(contentSubpathFromApp(path), ref);
+}
+
+export async function listFiles(path: string, ref?: string): Promise<string[]> {
+  return listFilesAt(contentSubpathFromApp(path), ref);
+}
+
+export async function putFile(
+  path: string,
+  content: string,
+  message: string,
+  branch?: string,
+  sha?: string
+): Promise<{ sha: string; commitSha: string }> {
+  return putFileAt(contentSubpathFromApp(path), content, message, branch, sha);
 }
 
 export async function deleteFile(
@@ -179,18 +255,7 @@ export async function deleteFile(
   message: string,
   branch?: string
 ): Promise<void> {
-  if (!branch) await ensureWorkingBranch();
-  const octokit = getOctokit();
-  const { owner, repo } = getRepo();
-  const file = await getFile(path, branch || workingBranch());
-  await octokit.rest.repos.deleteFile({
-    owner,
-    repo,
-    path: toRepoPath(path),
-    message,
-    sha: file.sha,
-    branch: branch || workingBranch(),
-  });
+  return deleteFileAt(contentSubpathFromApp(path), message, branch);
 }
 
 // ── Branch & PR operations ──

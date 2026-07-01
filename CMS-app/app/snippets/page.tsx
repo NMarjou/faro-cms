@@ -5,6 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
@@ -15,6 +16,8 @@ interface SnippetInfo {
   name: string;
   file: string;
   folder: string;
+  // false when this project has a local override of the shared snippet.
+  shared: boolean;
 }
 
 interface SnippetsData {
@@ -29,11 +32,17 @@ type CreatingAt =
 
 export default function SnippetsPage() {
   const { role, loaded } = useCurrentUser();
+  const { project, projects } = useCurrentProject();
   const [data, setData] = useState<SnippetsData>({ folders: [], snippets: [] });
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [currentFolder, setCurrentFolder] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [overriding, setOverriding] = useState<string | null>(null);
+
+  // Friendly name of the active project for override copy/badges.
+  const projectLabel =
+    projects.find((p) => p.slug === project)?.name || project || "this project";
 
   const [creatingAt, setCreatingAt] = useState<CreatingAt>(null);
   const [newName, setNewName] = useState("");
@@ -97,12 +106,38 @@ export default function SnippetsPage() {
   };
 
   const deleteSnippet = async (snippet: SnippetInfo) => {
-    if (!confirm(`Delete snippet "${snippet.name}"?`)) return;
+    const msg = snippet.shared
+      ? `Delete shared snippet "${snippet.name}"?\n\nThis snippet is shared — deleting it removes it from ALL projects.`
+      : `Delete ${projectLabel}'s copy of "${snippet.name}"? The shared version is restored.`;
+    if (!confirm(msg)) return;
     setDeleting(snippet.file);
     try {
       await fetch("/api/content", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: snippet.file, message: `Delete snippet: ${snippet.name}` }) });
       loadSnippets();
     } catch (err) { console.error(err); } finally { setDeleting(null); }
+  };
+
+  // "Make project-specific": fork the shared snippet into the current project.
+  const makeProjectSpecific = async (snippet: SnippetInfo) => {
+    setOverriding(snippet.file);
+    try {
+      await fetch("/api/snippets/override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: snippet.file }),
+      });
+      loadSnippets();
+    } catch (err) { console.error(err); } finally { setOverriding(null); }
+  };
+
+  // "Revert to shared": drop this project's override, restoring the shared copy.
+  const revertToShared = async (snippet: SnippetInfo) => {
+    if (!confirm(`Revert "${snippet.name}" to the shared version?\n\nThis discards ${projectLabel}'s copy and any changes made to it.`)) return;
+    setOverriding(snippet.file);
+    try {
+      await fetch(`/api/snippets/override?file=${encodeURIComponent(snippet.file)}`, { method: "DELETE" });
+      loadSnippets();
+    } catch (err) { console.error(err); } finally { setOverriding(null); }
   };
 
   const startCreating = (at: CreatingAt) => { setCreatingAt(at); setNewName(""); };
@@ -136,6 +171,16 @@ export default function SnippetsPage() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z" />
       <polyline points="16 3 16 8 21 8" />
+    </svg>
+  );
+  const ForkIcon = () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" />
+    </svg>
+  );
+  const RevertIcon = () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
     </svg>
   );
 
@@ -194,6 +239,20 @@ export default function SnippetsPage() {
           <span className="tree-label">{snippet.name}</span>
           <span style={{ fontSize: 11, color: "var(--fg-muted)", fontFamily: "var(--font-mono)", marginLeft: "auto" }}>{snippet.file.split("/").pop()}</span>
         </Link>
+        {snippet.shared ? (
+          <span className="badge" title="Shared across all projects" style={{ marginLeft: 8 }}>Shared</span>
+        ) : (
+          <span className="badge badge-accent" title={`Specific to ${projectLabel}`} style={{ marginLeft: 8 }}>{projectLabel}</span>
+        )}
+        {snippet.shared ? (
+          <button className="tree-add-btn tree-add-btn-hover" title={`Make project-specific (copy into ${projectLabel})`} disabled={overriding === snippet.file} onClick={() => makeProjectSpecific(snippet)}>
+            {overriding === snippet.file ? "..." : <ForkIcon />}
+          </button>
+        ) : (
+          <button className="tree-add-btn tree-add-btn-hover" title="Revert to shared" disabled={overriding === snippet.file} onClick={() => revertToShared(snippet)}>
+            {overriding === snippet.file ? "..." : <RevertIcon />}
+          </button>
+        )}
         <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete snippet" disabled={deleting === snippet.file} onClick={() => deleteSnippet(snippet)}>
           {deleting === snippet.file ? "..." : "\u00d7"}
         </button>

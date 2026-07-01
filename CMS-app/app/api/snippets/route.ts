@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFilesRecursive, getFile, putFile, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
+import { listOverridable, getFile, putFile, SNIPPETS_LIST_PREFIX, type AssetScope } from "@/lib/storage";
 import { memoize } from "@/lib/cache";
+import { setRequestProject } from "@/lib/request-context";
+import { currentProjectSlug } from "@/lib/content-paths";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import matter from "gray-matter";
 
-type SnippetEntry = { name: string; file: string; folder: string };
+// `shared` distinguishes the shared-pool copy from a project-local override.
+type SnippetEntry = { name: string; file: string; folder: string; shared: boolean };
 type SnippetListing = { folders: string[]; snippets: SnippetEntry[] };
 
 function basenameNoExt(filePath: string): string {
@@ -36,11 +39,13 @@ async function loadOrder(folder: string): Promise<string[]> {
 }
 
 async function buildListing(full: boolean): Promise<SnippetListing> {
-  const files = await listFilesRecursive("content/snippets");
+  // listOverridable returns the union of shared + project-local snippets (the
+  // project override shadowing its shared twin) with each entry's origin.
+  const entries = await listOverridable("content/snippets");
   const folderSet = new Set<string>();
-  const candidates: { filePath: string; relPath: string; folder: string }[] = [];
+  const candidates: { filePath: string; relPath: string; folder: string; scope: AssetScope }[] = [];
 
-  for (const filePath of files) {
+  for (const { file: filePath, scope } of entries) {
     const relPath = filePath.replace(/^content\//, "");
     const parts = relPath.replace(/^snippets\//, "").split("/");
     const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
@@ -53,7 +58,7 @@ async function buildListing(full: boolean): Promise<SnippetListing> {
     }
 
     if (!filePath.endsWith(".mdx") && !filePath.endsWith(".html")) continue;
-    candidates.push({ filePath, relPath, folder });
+    candidates.push({ filePath, relPath, folder, scope });
   }
 
   // Lite mode (default for editor) derives names from filename — avoids
@@ -63,20 +68,22 @@ async function buildListing(full: boolean): Promise<SnippetListing> {
   let snippets: SnippetEntry[];
   if (full) {
     snippets = await Promise.all(
-      candidates.map(async ({ filePath, relPath, folder }) => {
+      candidates.map(async ({ filePath, relPath, folder, scope }) => {
+        const shared = scope === "shared";
         try {
           const raw = await getFile(filePath);
-          return { name: extractSnippetName(raw.content, filePath), file: relPath, folder };
+          return { name: extractSnippetName(raw.content, filePath), file: relPath, folder, shared };
         } catch {
-          return { name: basenameNoExt(filePath), file: relPath, folder };
+          return { name: basenameNoExt(filePath), file: relPath, folder, shared };
         }
       })
     );
   } else {
-    snippets = candidates.map(({ filePath, relPath, folder }) => ({
+    snippets = candidates.map(({ filePath, relPath, folder, scope }) => ({
       name: basenameNoExt(filePath),
       file: relPath,
       folder,
+      shared: scope === "shared",
     }));
   }
 
@@ -105,11 +112,14 @@ const CACHE_HEADERS = {
 };
 
 export async function GET(request: NextRequest) {
+  setRequestProject(request);
   const full = request.nextUrl.searchParams.get("full") === "1";
 
   try {
+    // Project-keyed: the listing now differs per project (overrides shadow
+    // shared), so a global key would serve one project's list to another.
     const data = await memoize(
-      `${SNIPPETS_LIST_PREFIX}${full ? "full" : "lite"}`,
+      `${SNIPPETS_LIST_PREFIX}${currentProjectSlug()}:${full ? "full" : "lite"}`,
       () => buildListing(full)
     );
     return NextResponse.json(data, { headers: CACHE_HEADERS });
@@ -119,6 +129,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
