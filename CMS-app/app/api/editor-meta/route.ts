@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { currentProjectSlug } from "@/lib/content-paths";
 import { getCachedFile, listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
-import { loadMergedVariablesFlat } from "@/lib/merged-config";
+import { loadMergedVariablesFlat, loadMergedGlossary } from "@/lib/merged-config";
 import { memoize } from "@/lib/cache";
 
 /**
@@ -51,17 +51,16 @@ async function loadSnippetNames(): Promise<string[]> {
 
 export async function GET(request: NextRequest) {
   setRequestProject(request);
-  const [variables, conditionsRaw, glossaryRaw, stylesRaw, snippetNames] =
+  const [variables, conditionsRaw, glossaryMerged, stylesRaw, snippetNames] =
     await Promise.all([
       loadVariables(),
       loadJson("conditions.json"),
-      loadJson("glossary.json"),
+      loadMergedGlossary(),
       loadJson("styles.json"),
       loadSnippetNames(),
     ]);
 
   const conditions = (conditionsRaw as { tags?: string[]; colors?: Record<string, string> }) || {};
-  const glossary = (glossaryRaw as { terms?: unknown[] }) || { terms: [] };
 
   const meta: EditorMeta = {
     variables,
@@ -69,7 +68,7 @@ export async function GET(request: NextRequest) {
       tags: conditions.tags || [],
       colors: conditions.colors || {},
     },
-    glossary: { terms: glossary.terms || [] },
+    glossary: { terms: glossaryMerged.merged.terms },
     styles: Array.isArray(stylesRaw) ? stylesRaw : [],
     snippetNames,
   };

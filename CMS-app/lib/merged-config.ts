@@ -11,7 +11,7 @@
  */
 
 import { getCachedFile, readProjectOverlay } from "./storage";
-import type { Variables, VariableSet, VariableSetsData } from "./types";
+import type { Variables, VariableSet, VariableSetsData, Glossary, GlossaryTerm } from "./types";
 
 /** Per-set, per-key origin so the manager can badge shared vs project. */
 export type VariableScopes = Record<string, Record<string, "shared" | "project">>;
@@ -96,4 +96,58 @@ export async function loadMergedVariablesFlat(ref?: string): Promise<Variables> 
   const flat: Variables = {};
   for (const set of merged.sets) Object.assign(flat, set.variables);
   return flat;
+}
+
+// ── Glossary (terms keyed by name) ──────────────────────────────────────────
+
+/** Per-term origin so the manager can badge shared vs project. */
+export type GlossaryScopes = Record<string, "shared" | "project">;
+
+/**
+ * Merge a sparse project overlay over the shared glossary. Terms match by
+ * `term` name; an overlay term overrides its shared twin's definition in place,
+ * and overlay-only terms are appended as project-scoped.
+ */
+export function mergeGlossary(
+  shared: Glossary,
+  overlay: Glossary | null
+): { merged: Glossary; scopes: GlossaryScopes } {
+  const scopes: GlossaryScopes = {};
+  const overlayByTerm = new Map<string, GlossaryTerm>(
+    (overlay?.terms ?? []).map((t) => [t.term, t])
+  );
+  const seen = new Set<string>();
+  const terms: GlossaryTerm[] = [];
+
+  for (const t of shared.terms) {
+    const ov = overlayByTerm.get(t.term);
+    seen.add(t.term);
+    scopes[t.term] = ov ? "project" : "shared";
+    terms.push(ov ? { ...t, definition: ov.definition } : t);
+  }
+  for (const ov of overlay?.terms ?? []) {
+    if (seen.has(ov.term)) continue;
+    scopes[ov.term] = "project";
+    terms.push(ov);
+  }
+
+  return { merged: { terms }, scopes };
+}
+
+function toGlossary(content: string): Glossary {
+  const data = JSON.parse(content);
+  return { terms: Array.isArray(data?.terms) ? (data.terms as GlossaryTerm[]) : [] };
+}
+
+/** Merged glossary for the current project (shared + overlay) with scopes. */
+export async function loadMergedGlossary(
+  ref?: string
+): Promise<{ merged: Glossary; scopes: GlossaryScopes }> {
+  let shared: Glossary = { terms: [] };
+  try {
+    shared = toGlossary((await getCachedFile("content/glossary.json", ref)).content);
+  } catch { /* none yet */ }
+  const overlayFile = await readProjectOverlay("glossary.json");
+  const overlay = overlayFile ? toGlossary(overlayFile.content) : null;
+  return mergeGlossary(shared, overlay);
 }
