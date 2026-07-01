@@ -12,6 +12,7 @@ import type {
   SearchEntry,
 } from "./types";
 import { getFile } from "./storage";
+import { loadMergedVariablesFlat } from "./merged-config";
 
 const CONTENT_BASE = "content";
 
@@ -123,22 +124,9 @@ function collectArticles(sections: TocSection[], result: TocArticle[]) {
 // ── Variables ──
 
 export async function getVariables(ref?: string): Promise<Variables> {
-  try {
-    const file = await getFile(`${CONTENT_BASE}/variables.json`, ref);
-    const data = JSON.parse(file.content);
-    // Handle sets format: merge all sets into a flat object
-    if (data.sets && Array.isArray(data.sets)) {
-      const flat: Variables = {};
-      for (const set of data.sets) {
-        Object.assign(flat, set.variables);
-      }
-      return flat;
-    }
-    // Legacy flat format
-    return data;
-  } catch {
-    return {};
-  }
+  // Merges the current project's overlay over the shared sets (flattened), so
+  // compiled/published output uses the project's variable values.
+  return loadMergedVariablesFlat(ref);
 }
 
 // ── Conditions ──

@@ -218,4 +218,41 @@ export async function revertToShared(rel: string): Promise<void> {
   invalidateFileCache(`content/${rel}`);
 }
 
+// ── Project overlays (merge-type config: variables/glossary/… ) ──
+//
+// Unlike per-file override (whole-file shadow), merge-type config keeps a
+// SPARSE overlay at the project subpath that callers merge over the shared
+// file at read time. These helpers address that overlay subpath directly —
+// no app path maps to it, since the file classifies as shared.
+
+/** Read the current project's overlay of `rel`, or null if it has none. */
+export async function readProjectOverlay(rel: string): Promise<GitHubFile | null> {
+  try {
+    return await getFileAtSub(projectSubpath(rel));
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the current project has an overlay of `rel`. */
+export function hasProjectOverlay(rel: string): Promise<boolean> {
+  return existsAtSub(projectSubpath(rel));
+}
+
+/** Write the current project's sparse overlay of `rel`. */
+export async function writeProjectOverlay(
+  rel: string,
+  content: string,
+  message: string
+): Promise<{ sha: string; commitSha: string }> {
+  invalidate(FILE_KEY(projectSubpath(rel)));
+  return putFileAtSub(projectSubpath(rel), content, message);
+}
+
+/** Delete the current project's overlay of `rel` (clear all its overrides). */
+export async function deleteProjectOverlay(rel: string, message: string): Promise<void> {
+  invalidate(FILE_KEY(projectSubpath(rel)));
+  await deleteFileAtSub(projectSubpath(rel), message);
+}
+
 export { isLocal };
