@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFilesRecursive, getFile, putFile } from "@/lib/storage";
+import { listOverridable, getFile, putFile } from "@/lib/storage";
+import { setRequestProject } from "@/lib/request-context";
 import { loadImageMeta } from "@/lib/image-meta";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { canManageImages } from "@/lib/permissions";
@@ -16,20 +17,24 @@ async function loadOrder(folder: string): Promise<string[]> {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  setRequestProject(request);
   try {
-    const files = await listFilesRecursive("content/images");
+    // listOverridable returns the union of shared + project-local images (the
+    // project override shadowing its shared twin) with each entry's origin.
+    const entries = await listOverridable("content/images");
     const meta = await loadImageMeta();
     const images: {
       name: string;
       file: string;
       folder: string;
+      shared: boolean;
       owner?: string;
       uploadedAt?: string;
     }[] = [];
     const folderSet = new Set<string>();
 
-    for (const filePath of files) {
+    for (const { file: filePath, scope } of entries) {
       const relPath = filePath.replace(/^content\//, "");
       const parts = relPath.replace(/^images\//, "").split("/");
       const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
@@ -45,11 +50,14 @@ export async function GET() {
       if (!IMAGE_EXTENSIONS.includes(ext)) continue;
 
       const name = filePath.split("/").pop() || filePath;
+      // Ownership is a single shared manifest keyed by relPath; a forked image
+      // inherits its shared owner/date (per-project ownership is a follow-up).
       const m = meta[relPath];
       images.push({
         name,
         file: relPath,
         folder,
+        shared: scope === "shared",
         owner: m?.owner,
         uploadedAt: m?.uploadedAt,
       });
@@ -75,6 +83,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canManageImages(user?.role ?? null)) return forbidden();
   try {

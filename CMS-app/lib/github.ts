@@ -210,6 +210,48 @@ export async function putFileAt(
   };
 }
 
+/**
+ * Byte-exact copy of one blob to another path. Passes the source's base64
+ * through verbatim, so it's binary-safe (unlike get(utf-8)+put, which mangles
+ * images). Used to fork a shared asset into a project override.
+ */
+export async function copyFileAt(
+  fromSub: string,
+  toSub: string,
+  message: string,
+  branch?: string
+): Promise<void> {
+  if (!branch) await ensureWorkingBranch();
+  const octokit = getOctokit();
+  const { owner, repo } = getRepo();
+  const { data } = await octokit.rest.repos.getContent({
+    owner,
+    repo,
+    path: repoPathForSub(fromSub),
+    ref: branch || workingBranch(),
+  });
+  if (Array.isArray(data) || data.type !== "file") {
+    throw new Error(`Path ${fromSub} is not a file`);
+  }
+  const base64 = data.content.replace(/\n/g, ""); // already base64; write verbatim
+  let sha: string | undefined;
+  try {
+    sha = (await getFileAt(toSub, branch || workingBranch())).sha;
+  } catch {
+    // target doesn't exist yet
+  }
+  await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path: repoPathForSub(toSub),
+    message,
+    content: base64,
+    branch: branch || workingBranch(),
+    ...(sha ? { sha } : {}),
+  });
+  invalidateTreeCache();
+}
+
 export async function deleteFileAt(
   sub: string,
   message: string,

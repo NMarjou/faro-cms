@@ -63,6 +63,16 @@ export async function deleteFileAt(sub: string): Promise<void> {
   }
 }
 
+/** Byte-exact copy (binary-safe — no utf-8 round-trip). */
+export async function copyFileAt(fromSub: string, toSub: string): Promise<void> {
+  ensureContentDir();
+  const from = path.join(CONTENT_ROOT, fromSub);
+  const to = path.join(CONTENT_ROOT, toSub);
+  const dir = path.dirname(to);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(from, to);
+}
+
 export async function listFilesAt(sub: string): Promise<string[]> {
   const fullPath = path.join(CONTENT_ROOT, sub);
   if (!fs.existsSync(fullPath)) return [];

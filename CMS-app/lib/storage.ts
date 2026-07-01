@@ -52,6 +52,11 @@ function putFileAtSub(
 function deleteFileAtSub(sub: string, message: string, branch?: string): Promise<void> {
   return isLocal ? localFs.deleteFileAt(sub) : github.deleteFileAt(sub, message, branch);
 }
+function copyAtSub(fromSub: string, toSub: string, message: string): Promise<void> {
+  return isLocal
+    ? localFs.copyFileAt(fromSub, toSub)
+    : github.copyFileAt(fromSub, toSub, message);
+}
 function listAtSub(sub: string): Promise<string[]> {
   return isLocal ? localFs.listFilesAt(sub) : github.listFilesAt(sub);
 }
@@ -76,6 +81,16 @@ async function resolveSubpath(appPath: string): Promise<string> {
   if (!isOverridable(rel)) return contentSubpathFromApp(appPath);
   const proj = projectSubpath(rel);
   return (await existsAtSub(proj)) ? proj : sharedSubpath(rel);
+}
+
+/**
+ * Public form of {@link resolveSubpath}: the CMS-content-relative physical
+ * subpath an app `content/<rel>` path resolves to for the current project
+ * (override-aware). For callers that reach the filesystem directly instead of
+ * going through this module's I/O (e.g. the raw-image route).
+ */
+export function resolvePhysicalSubpath(appPath: string): Promise<string> {
+  return resolveSubpath(appPath);
 }
 
 // ── File reads ──
@@ -188,18 +203,13 @@ export function hasProjectOverride(rel: string): Promise<boolean> {
   return existsAtSub(projectSubpath(rel));
 }
 
-/** Fork the shared copy of `rel` into the current project ("Make project-specific"). */
-export async function makeProjectSpecific(
-  rel: string
-): Promise<{ sha: string; commitSha: string }> {
-  const shared = await getFileAtSub(sharedSubpath(rel));
-  const result = await putFileAtSub(
-    projectSubpath(rel),
-    shared.content,
-    `Make project-specific: ${rel}`
-  );
+/**
+ * Fork the shared copy of `rel` into the current project ("Make
+ * project-specific"). Byte-exact copy so binary assets (images) survive.
+ */
+export async function makeProjectSpecific(rel: string): Promise<void> {
+  await copyAtSub(sharedSubpath(rel), projectSubpath(rel), `Make project-specific: ${rel}`);
   invalidateFileCache(`content/${rel}`);
-  return result;
 }
 
 /** Remove the current project's override of `rel`, restoring the shared copy. */
