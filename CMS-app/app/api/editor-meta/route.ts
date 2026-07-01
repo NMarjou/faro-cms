@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { currentProjectSlug } from "@/lib/content-paths";
 import { getCachedFile, listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
+import { loadMergedVariablesFlat } from "@/lib/merged-config";
 import { memoize } from "@/lib/cache";
 
 /**
@@ -32,18 +33,8 @@ async function loadJson(path: string): Promise<unknown | null> {
 }
 
 async function loadVariables(): Promise<Record<string, string>> {
-  const raw = (await loadJson("variables.json")) as
-    | { sets?: { variables: Record<string, string> }[] }
-    | Record<string, string>
-    | null;
-  if (!raw) return {};
-  const sets = (raw as { sets?: { variables: Record<string, string> }[] }).sets;
-  if (Array.isArray(sets)) {
-    const flat: Record<string, string> = {};
-    for (const set of sets) Object.assign(flat, set.variables);
-    return flat;
-  }
-  return raw as Record<string, string>;
+  // Merges the current project's overlay over shared (flattened) for the editor.
+  return loadMergedVariablesFlat();
 }
 
 async function loadSnippetNames(): Promise<string[]> {
