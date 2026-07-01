@@ -58,14 +58,21 @@ const SHARED_DIRS = ["snippets", "images"];
 /**
  * Shared dirs that support per-project override (Phase 1): a `content/<rel>`
  * under one of these resolves to `projects/<slug>/<rel>` when that file exists,
- * otherwise to `shared/<rel>`. Snippets first; images follow (they also need
- * their `.metadata.json` entries forked). The existence probe + fallback lives
- * in the storage layer (it's async); `classify()` here stays override-blind.
+ * otherwise to `shared/<rel>`. The existence probe + fallback lives in the
+ * storage layer (it's async); `classify()` here stays override-blind.
  */
-export const OVERRIDABLE_DIRS = ["snippets"];
+export const OVERRIDABLE_DIRS = ["snippets", "images"];
 
-/** Whether `rel` is under an override-capable shared dir. */
+/**
+ * Whether `rel` is an override-capable *asset* file. Only real assets fork;
+ * the control-plane sidecars that live alongside them (`.metadata.json`,
+ * `.order.json`, `.gitkeep`) stay shared — otherwise the first owner/order
+ * write in a project would clobber the shared manifest for every project.
+ * Dotfiles are the marker: an asset basename never starts with ".".
+ */
 export function isOverridable(rel: string): boolean {
+  const base = rel.slice(rel.lastIndexOf("/") + 1);
+  if (base.startsWith(".")) return false;
   return OVERRIDABLE_DIRS.some((d) => rel === d || rel.startsWith(`${d}/`));
 }
 
