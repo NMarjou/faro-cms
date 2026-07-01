@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import { canManageImages, canDeleteImage } from "@/lib/permissions";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
@@ -15,6 +16,8 @@ interface ImageInfo {
   name: string;
   file: string;
   folder: string;
+  // false when this project has a local override of the shared image.
+  shared: boolean;
   owner?: string;
   uploadedAt?: string;
 }
@@ -26,11 +29,17 @@ interface ImagesData {
 
 export default function ImagesPage() {
   const { user, role, loaded } = useCurrentUser();
+  const { project, projects } = useCurrentProject();
   const [data, setData] = useState<ImagesData>({ folders: [], images: [] });
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [currentFolder, setCurrentFolder] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [overriding, setOverriding] = useState<string | null>(null);
+
+  // Friendly name of the active project for override copy/badges.
+  const projectLabel =
+    projects.find((p) => p.slug === project)?.name || project || "this project";
   const [uploading, setUploading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ImageInfo | null>(null);
@@ -107,12 +116,38 @@ export default function ImagesPage() {
   };
 
   const deleteImage = async (image: ImageInfo) => {
-    if (!confirm(`Delete image "${image.name}"?`)) return;
+    const msg = image.shared
+      ? `Delete shared image "${image.name}"?\n\nThis image is shared — deleting it removes it from ALL projects.`
+      : `Delete ${projectLabel}'s copy of "${image.name}"? The shared version is restored.`;
+    if (!confirm(msg)) return;
     setDeleting(image.file);
     try {
       await fetch("/api/content", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: image.file, message: `Delete image: ${image.name}` }) });
       loadImages();
     } catch (err) { console.error(err); } finally { setDeleting(null); }
+  };
+
+  // "Make project-specific": fork the shared image into the current project.
+  const makeProjectSpecific = async (image: ImageInfo) => {
+    setOverriding(image.file);
+    try {
+      await fetch("/api/images/override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: image.file }),
+      });
+      loadImages();
+    } catch (err) { console.error(err); } finally { setOverriding(null); }
+  };
+
+  // "Revert to shared": drop this project's override, restoring the shared copy.
+  const revertToShared = async (image: ImageInfo) => {
+    if (!confirm(`Revert "${image.name}" to the shared version?\n\nThis discards ${projectLabel}'s copy.`)) return;
+    setOverriding(image.file);
+    try {
+      await fetch(`/api/images/override?file=${encodeURIComponent(image.file)}`, { method: "DELETE" });
+      loadImages();
+    } catch (err) { console.error(err); } finally { setOverriding(null); }
   };
 
   const handleReorderImages = async (folder: string, newItems: { id: string }[]) => {
@@ -142,6 +177,16 @@ export default function ImagesPage() {
   const FolderIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+  const ForkIcon = () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" />
+    </svg>
+  );
+  const RevertIcon = () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
     </svg>
   );
 
@@ -207,6 +252,20 @@ export default function ImagesPage() {
           )}
           <span style={{ fontSize: 11, color: "var(--fg-muted)", fontFamily: "var(--font-mono)", marginLeft: image.owner ? 8 : "auto" }}>{image.file.split("/").pop()}</span>
         </div>
+        {image.shared ? (
+          <span className="badge" title="Shared across all projects" style={{ marginLeft: 8 }}>Shared</span>
+        ) : (
+          <span className="badge badge-accent" title={`Specific to ${projectLabel}`} style={{ marginLeft: 8 }}>{projectLabel}</span>
+        )}
+        {canManageImages(role) && (image.shared ? (
+          <button className="tree-add-btn tree-add-btn-hover" title={`Make project-specific (copy into ${projectLabel})`} disabled={overriding === image.file} onClick={() => makeProjectSpecific(image)}>
+            {overriding === image.file ? "..." : <ForkIcon />}
+          </button>
+        ) : (
+          <button className="tree-add-btn tree-add-btn-hover" title="Revert to shared" disabled={overriding === image.file} onClick={() => revertToShared(image)}>
+            {overriding === image.file ? "..." : <RevertIcon />}
+          </button>
+        ))}
         {canDeleteImage(role, image, user?.email) && (
           <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete image" disabled={deleting === image.file} onClick={() => deleteImage(image)}>
             {deleting === image.file ? "..." : "\u00d7"}
