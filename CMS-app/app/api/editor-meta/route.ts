@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { currentProjectSlug } from "@/lib/content-paths";
 import { getCachedFile, listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
-import { loadMergedVariablesFlat, loadMergedGlossary } from "@/lib/merged-config";
+import { loadMergedVariablesFlat, loadMergedGlossary, loadMergedConditions } from "@/lib/merged-config";
 import { memoize } from "@/lib/cache";
 
 /**
@@ -51,22 +51,20 @@ async function loadSnippetNames(): Promise<string[]> {
 
 export async function GET(request: NextRequest) {
   setRequestProject(request);
-  const [variables, conditionsRaw, glossaryMerged, stylesRaw, snippetNames] =
+  const [variables, conditionsMerged, glossaryMerged, stylesRaw, snippetNames] =
     await Promise.all([
       loadVariables(),
-      loadJson("conditions.json"),
+      loadMergedConditions(),
       loadMergedGlossary(),
       loadJson("styles.json"),
       loadSnippetNames(),
     ]);
 
-  const conditions = (conditionsRaw as { tags?: string[]; colors?: Record<string, string> }) || {};
-
   const meta: EditorMeta = {
     variables,
     conditions: {
-      tags: conditions.tags || [],
-      colors: conditions.colors || {},
+      tags: conditionsMerged.merged.tags,
+      colors: conditionsMerged.merged.colors || {},
     },
     glossary: { terms: glossaryMerged.merged.terms },
     styles: Array.isArray(stylesRaw) ? stylesRaw : [],

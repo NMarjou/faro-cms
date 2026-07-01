@@ -105,7 +105,7 @@ export default function SidebarTree() {
       .then((data) => setVariablesData(data))
       .catch(() => {});
 
-    fetch("/api/content?path=conditions.json")
+    fetch("/api/conditions")
       .then((r) => r.json())
       .then((d) => {
         const parsed = d.content ? JSON.parse(d.content) : d;

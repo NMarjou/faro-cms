@@ -70,8 +70,8 @@ export default function PublishPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    // Load condition tags
-    fetch("/api/content?path=conditions.json")
+    // Load condition tags (merged for the current project)
+    fetch("/api/conditions")
       .then((r) => r.json())
       .then((d) => {
         const parsed = d.content ? JSON.parse(d.content) : d;

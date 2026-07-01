@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { ConditionsConfig, Project, User, UserRole } from "@/lib/types";
 import Icon from "@/components/Icon";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const DEFAULT_COLORS = [
@@ -13,8 +14,20 @@ const DEFAULT_COLORS = [
 
 export default function PlatformSettingsPage() {
   const { role, loaded: userLoaded } = useCurrentUser();
+  const { project, projects: allProjects } = useCurrentProject();
+  const projectLabel =
+    allProjects.find((p) => p.slug === project)?.name || project || "this project";
+
+  // Conditions: shared-mode edits tags/colors directly; project mode keeps a
+  // sparse overlay (project-only tags + per-tag color overrides) over a shared
+  // baseline. condScope switches between the two.
+  const [condScope, setCondScope] = useState<"shared" | "project">("shared");
   const [tags, setTags] = useState<string[]>([]);
   const [colors, setColors] = useState<Record<string, string>>({});
+  const [sharedCondTags, setSharedCondTags] = useState<string[]>([]);
+  const [sharedCondColors, setSharedCondColors] = useState<Record<string, string>>({});
+  const [ovTags, setOvTags] = useState<string[]>([]);
+  const [ovColors, setOvColors] = useState<Record<string, string>>({});
   const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -105,18 +118,6 @@ export default function PlatformSettingsPage() {
   };
 
   useEffect(() => {
-    // Load conditions
-    fetch("/api/content?path=conditions.json")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return;
-        const c: ConditionsConfig = d.content ? JSON.parse(d.content) : d;
-        setTags(c.tags || []);
-        setColors(c.colors || {});
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-
     // Load custom CSS
     fetch("/api/content?path=editor-styles.css")
       .then((r) => (r.ok ? r.json() : null))
@@ -138,6 +139,40 @@ export default function PlatformSettingsPage() {
       })
       .catch(() => setUsersLoaded(true));
   }, []);
+
+  // Load conditions for the active scope. Shared → editable tags/colors.
+  // Project → shared baseline (read-only) + this project's overlay.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (condScope === "shared") {
+        const d = await fetch("/api/conditions?scope=shared").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        if (cancelled) return;
+        setTags(d?.tags || []);
+        setColors(d?.colors || {});
+      } else {
+        const [merged, shared] = await Promise.all([
+          fetch("/api/conditions").then((r) => r.json()).catch(() => ({ tags: [], colors: {}, scopes: {} })),
+          fetch("/api/conditions?scope=shared").then((r) => r.json()).catch(() => ({ tags: [], colors: {} })),
+        ]);
+        if (cancelled) return;
+        const st: string[] = shared.tags || [];
+        setSharedCondTags(st);
+        setSharedCondColors(shared.colors || {});
+        // Overlay = project-only tags + tags whose color the project overrides.
+        const scopes: Record<string, "shared" | "project"> = merged.scopes || {};
+        const projTags = (merged.tags || []).filter((t: string) => !st.includes(t));
+        const projColors: Record<string, string> = {};
+        for (const t of merged.tags || []) {
+          if (scopes[t] === "project") projColors[t] = (merged.colors || {})[t];
+        }
+        setOvTags(projTags);
+        setOvColors(projColors);
+      }
+      if (!cancelled) setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [condScope]);
 
   const flashUsers = (msg: string) => {
     setUsersMessage(msg);
@@ -187,28 +222,52 @@ export default function PlatformSettingsPage() {
     persistUsers(next, `Remove user ${email}`);
   };
 
+  const flashCond = (m: string) => { setMessage(m); setTimeout(() => setMessage(null), 2000); };
+
   const saveConditions = async () => {
     setSaving(true);
     try {
-      const data: ConditionsConfig = { tags, colors };
-      const res = await fetch("/api/content", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: "conditions.json",
-          content: JSON.stringify(data, null, 2),
-          message: "Update condition tags",
-        }),
-      });
-      if (res.ok) {
-        setMessage("Saved");
-        setTimeout(() => setMessage(null), 2000);
+      let res: Response;
+      if (condScope === "project") {
+        const empty = ovTags.length === 0 && Object.keys(ovColors).length === 0;
+        res = empty
+          ? await fetch("/api/conditions?scope=project", { method: "DELETE" })
+          : await fetch("/api/conditions?scope=project", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tags: ovTags, colors: ovColors } as ConditionsConfig),
+            });
+      } else {
+        res = await fetch("/api/conditions?scope=shared", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tags, colors } as ConditionsConfig),
+        });
       }
+      flashCond(res.ok ? "Saved" : "Failed to save");
     } catch {
-      setMessage("Failed to save");
+      flashCond("Failed to save");
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Project-mode condition overlay ops ──
+  const setProjColor = (tag: string, color: string) => setOvColors((prev) => ({ ...prev, [tag]: color }));
+  const revertProjColor = (tag: string) =>
+    setOvColors((prev) => { const n = { ...prev }; delete n[tag]; return n; });
+  const addProjTag = () => {
+    const tag = newTag.trim();
+    if (!tag || sharedCondTags.includes(tag) || ovTags.includes(tag)) return;
+    const used = { ...sharedCondColors, ...ovColors };
+    const nextColor = DEFAULT_COLORS.find((c) => !Object.values(used).includes(c)) || DEFAULT_COLORS[0];
+    setOvTags((prev) => [...prev, tag]);
+    setProjColor(tag, nextColor);
+    setNewTag("");
+  };
+  const removeProjTag = (tag: string) => {
+    setOvTags((prev) => prev.filter((t) => t !== tag));
+    revertProjColor(tag);
   };
 
   const saveCss = async () => {
@@ -424,71 +483,86 @@ export default function PlatformSettingsPage() {
 
         {/* Conditional Content Tags */}
         <div className="card" style={{ maxWidth: 600, marginTop: 16 }}>
-          <h2 style={{ fontSize: 16, marginBottom: 16 }}>Conditional Content Tags</h2>
-          <p style={{ fontSize: 14, color: "var(--fg-muted)", marginBottom: 12 }}>
-            Define the available condition tags and their colors. Colors help distinguish conditions at a glance in the editor.
-          </p>
-
-          {loaded && tags.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-              {tags.map((tag) => (
-                <div key={tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input
-                    type="color"
-                    value={colors[tag] || "#f59e0b"}
-                    onChange={(e) => updateColor(tag, e.target.value)}
-                    style={{
-                      width: 28, height: 28, padding: 0,
-                      border: "1px solid var(--border)", borderRadius: 4,
-                      cursor: "pointer", background: "none",
-                    }}
-                    title={`Color for ${tag}`}
-                  />
-                  <span
-                    style={{
-                      flex: 1, fontSize: 14, padding: "4px 8px", borderRadius: 4,
-                      background: hexToRgba(colors[tag] || "#f59e0b", 0.12),
-                      borderLeft: `3px solid ${colors[tag] || "#f59e0b"}`,
-                    }}
-                  >
-                    {tag}
-                  </span>
-                  <button
-                    onClick={() => removeTag(tag)}
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "var(--fg-muted)", fontSize: 16, padding: "2px 6px", borderRadius: 3,
-                    }}
-                    title={`Remove ${tag}`}
-                  >
-                    x
-                  </button>
-                </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 16 }}>Conditional Content Tags</h2>
+            <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+              {(["shared", "project"] as const).map((s) => (
+                <button key={s} onClick={() => setCondScope(s)} className="btn btn-sm"
+                  style={{ border: "none", borderRadius: 0, background: condScope === s ? "var(--accent)" : "transparent", color: condScope === s ? "#fff" : "var(--fg)" }}>
+                  {s === "shared" ? "Shared (all projects)" : projectLabel}
+                </button>
               ))}
             </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              className="input"
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addTag(); }}
-              placeholder="New tag name..."
-              style={{ flex: 1 }}
-            />
-            <button onClick={addTag} className="btn" disabled={!newTag.trim()}>
-              Add
-            </button>
           </div>
+
+          {condScope === "shared" ? (
+            <>
+              <p style={{ fontSize: 14, color: "var(--fg-muted)", marginBottom: 12 }}>
+                Shared condition tags + colors — available in every project. Changes here affect all projects.
+              </p>
+              {loaded && tags.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                  {tags.map((tag) => (
+                    <div key={tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input type="color" value={colors[tag] || "#f59e0b"} onChange={(e) => updateColor(tag, e.target.value)}
+                        style={{ width: 28, height: 28, padding: 0, border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", background: "none" }} title={`Color for ${tag}`} />
+                      <span style={{ flex: 1, fontSize: 14, padding: "4px 8px", borderRadius: 4, background: hexToRgba(colors[tag] || "#f59e0b", 0.12), borderLeft: `3px solid ${colors[tag] || "#f59e0b"}` }}>{tag}</span>
+                      <button onClick={() => removeTag(tag)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--fg-muted)", fontSize: 16, padding: "2px 6px", borderRadius: 3 }} title={`Remove ${tag}`}>x</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input className="input" value={newTag} onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addTag(); }} placeholder="New tag name..." style={{ flex: 1 }} />
+                <button onClick={addTag} className="btn" disabled={!newTag.trim()}>Add</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 14, color: "var(--fg-muted)", marginBottom: 12 }}>
+                Condition overrides for <strong>{projectLabel}</strong>. Recolor a shared tag to give this project its own color, or add project-only tags. Other projects are unaffected.
+              </p>
+              {loaded && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                  {[...sharedCondTags, ...ovTags].map((tag) => {
+                    const isProjectOnly = ovTags.includes(tag);
+                    const overridden = tag in ovColors;
+                    const inProject = isProjectOnly || overridden;
+                    const color = ovColors[tag] ?? sharedCondColors[tag] ?? "#f59e0b";
+                    return (
+                      <div key={tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <input type="color" value={color} onChange={(e) => setProjColor(tag, e.target.value)}
+                          style={{ width: 28, height: 28, padding: 0, border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", background: "none" }} title={`Color for ${tag}`} />
+                        <span style={{ flex: 1, fontSize: 14, padding: "4px 8px", borderRadius: 4, background: hexToRgba(color, 0.12), borderLeft: `3px solid ${color}` }}>{tag}</span>
+                        <span className={inProject ? "badge badge-accent" : "badge"} title={inProject ? `Specific to ${projectLabel}` : "Shared"}>
+                          {inProject ? projectLabel : "Shared"}
+                        </span>
+                        {isProjectOnly ? (
+                          <button onClick={() => removeProjTag(tag)} className="btn btn-sm" title="Remove project tag">Remove</button>
+                        ) : overridden ? (
+                          <button onClick={() => revertProjColor(tag)} className="btn btn-sm" title="Revert to shared color">Revert</button>
+                        ) : (
+                          <span style={{ width: 60 }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input className="input" value={newTag} onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addProjTag(); }} placeholder="Project-only tag name..." style={{ flex: 1 }} />
+                <button onClick={addProjTag} className="btn" disabled={!newTag.trim()}>Add</button>
+              </div>
+            </>
+          )}
 
           <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
             <button onClick={saveConditions} disabled={saving} className="btn btn-primary">
-              {saving ? "Saving..." : "Save"}
+              {saving ? "Saving..." : condScope === "project" ? "Save Overrides" : "Save"}
             </button>
-            {message && (
-              <span style={{ fontSize: 13, color: "var(--success)" }}>{message}</span>
-            )}
+            {message && <span style={{ fontSize: 13, color: "var(--success)" }}>{message}</span>}
           </div>
         </div>
 
