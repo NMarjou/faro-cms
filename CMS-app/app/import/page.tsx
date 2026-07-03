@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import PageHeader from "@/components/PageHeader";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
@@ -1081,9 +1082,8 @@ export default function ImportPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Import</h1>
-      </header>
+      <PageHeader title="Import">
+      </PageHeader>
       <div className="main-body">
         <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
           <p style={{ fontSize: 14, color: "var(--fg-muted)", margin: 0 }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import PageHeader from "@/components/PageHeader";
 import type { ConditionsConfig, Project, User, UserRole } from "@/lib/types";
 import Icon from "@/components/Icon";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -368,9 +369,8 @@ export default function PlatformSettingsPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Platform Settings</h1>
-      </header>
+      <PageHeader title="Platform Settings">
+      </PageHeader>
       <div className="main-body">
         {/* Projects */}
         <div className="card" style={{ maxWidth: 600, marginBottom: 16 }}>

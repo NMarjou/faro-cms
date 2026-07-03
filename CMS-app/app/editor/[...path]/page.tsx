@@ -6,6 +6,7 @@ import type { JSONContent } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import Icon from "@/components/Icon";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
+import QuickCreate from "@/components/QuickCreate";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   canCreateArticles,
@@ -723,6 +724,7 @@ export default function EditorPage() {
       <header className="main-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => router.push(isSnippet ? "/snippets" : "/articles")} className="btn btn-sm">Back</button>
+          <QuickCreate />
           <h1 style={{ fontSize: 16 }}>{title}</h1>
           <span className="badge">{isSnippet ? "SNIPPET" : format.toUpperCase()}</span>
           {!isSnippet && articleMeta && <ArticleStatusBadge article={articleMeta} />}

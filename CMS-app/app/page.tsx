@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
 import type { Toc, TocArticle } from "@/lib/types";
 import Icon from "@/components/Icon";
@@ -142,9 +143,8 @@ export default function DashboardPage() {
   if (isContributor) {
     return (
       <>
-        <header className="main-header">
-          <h1>Dashboard</h1>
-        </header>
+        <PageHeader title="Dashboard">
+        </PageHeader>
         <div className="main-body" style={{ backgroundImage: "var(--paper-grain)" }}>
           <div style={{ maxWidth: 880, margin: "0 auto", width: "100%" }}>
             <h2
@@ -256,12 +256,11 @@ export default function DashboardPage() {
   // ── Tech writer view (default) ───────────────────────────────────────────
   return (
     <>
-      <header className="main-header">
-        <h1>Dashboard</h1>
+      <PageHeader title="Dashboard">
         <Link href="/articles/new" className="btn btn-primary">
           New Article
         </Link>
-      </header>
+      </PageHeader>
       <div className="main-body" style={{ backgroundImage: "var(--paper-grain)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", width: "100%" }}>
           <h2

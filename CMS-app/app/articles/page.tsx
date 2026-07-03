@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
 import type { Toc, TocCategory, TocArticle } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -143,14 +144,13 @@ export default function ArticlesPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Articles</h1>
+      <PageHeader title="Articles">
         {canCreate && (
           <Link href="/articles/new" className="btn btn-primary">
             New Article
           </Link>
         )}
-      </header>
+      </PageHeader>
       <div className="main-body">
         {loading && <p>Loading articles...</p>}
         {!loading && !toc && (

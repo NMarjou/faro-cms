@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
 import type { Suggestion } from "@/lib/types";
 import Icon from "@/components/Icon";
@@ -46,9 +47,8 @@ export default function ReviewQueuePage() {
   if (userLoaded && role === "contributor") {
     return (
       <>
-        <header className="main-header">
-          <h1>Review Queue</h1>
-        </header>
+        <PageHeader title="Review Queue">
+        </PageHeader>
         <div className="main-body">
           <div className="card" style={{ maxWidth: 600, color: "var(--fg-muted)" }}>
             The review queue is available to tech writers only.
@@ -60,8 +60,7 @@ export default function ReviewQueuePage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Review Queue</h1>
+      <PageHeader title="Review Queue">
         <div style={{ display: "flex", gap: 8 }}>
           {!loading && totalPending > 0 && (
             <span
@@ -89,7 +88,7 @@ export default function ReviewQueuePage() {
             </span>
           )}
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body" style={{ backgroundImage: "var(--paper-grain)" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", width: "100%" }}>
           <p

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
 import type { SearchEntry } from "@/lib/types";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
@@ -36,9 +37,8 @@ export default function SearchPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Search</h1>
-      </header>
+      <PageHeader title="Search">
+      </PageHeader>
       <div className="main-body">
         <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
           <input

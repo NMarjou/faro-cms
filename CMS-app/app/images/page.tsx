@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
+import PageHeader from "@/components/PageHeader";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -342,8 +343,7 @@ export default function ImagesPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Images</h1>
+      <PageHeader title="Images">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {error && <span style={{ fontSize: 13, color: "var(--danger)" }}>{error}</span>}
           <button className="btn" onClick={() => { setCreatingFolder(currentFolder || ""); setNewFolderName(""); }}>New Folder</button>
@@ -353,7 +353,7 @@ export default function ImagesPage() {
           <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.svg" multiple style={{ display: "none" }}
             onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); }} />
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         <Breadcrumbs />
 

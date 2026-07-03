@@ -8,7 +8,6 @@ import {
   Spectral,
 } from "next/font/google";
 import SidebarTree from "@/components/SidebarTree";
-import QuickCreate from "@/components/QuickCreate";
 import ThemeProvider from "@/components/ThemeProvider";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
 import { CurrentProjectProvider } from "@/components/CurrentProjectProvider";
@@ -92,7 +91,6 @@ export default function RootLayout({
                   <SidebarTree />
                   <main className="main-content">{children}</main>
                 </div>
-                <QuickCreate />
               </CurrentProjectProvider>
             </CurrentUserProvider>
           </AuthProvider>

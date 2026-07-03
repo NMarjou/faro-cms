@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { DragHandle } from "@/components/SortableList";
@@ -328,14 +329,13 @@ export default function SnippetsPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Snippets</h1>
+      <PageHeader title="Snippets">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {error && <span style={{ fontSize: 13, color: "var(--danger)" }}>{error}</span>}
           <button className="btn" onClick={() => startCreating({ type: "folder", parent: currentFolder })}>New Folder</button>
           <button className="btn btn-primary" onClick={() => startCreating({ type: "snippet", folder: currentFolder })}>New Snippet</button>
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         <Breadcrumbs />
 

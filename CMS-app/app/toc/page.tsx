@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import dynamic from "next/dynamic";
 import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
 import { DragHandle } from "@/components/SortableList";
@@ -157,8 +158,7 @@ export default function TocPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Table of Contents</h1>
+      <PageHeader title="Table of Contents">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {message && (
             <span style={{ fontSize: 13, color: "var(--success)" }}>
@@ -169,7 +169,7 @@ export default function TocPage() {
             Add Category
           </button>
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         {loading && <p>Loading...</p>}
         {toc && (

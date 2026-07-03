@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import PageHeader from "@/components/PageHeader";
 import type { ContentStyle } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { useCurrentProject } from "@/components/CurrentProjectProvider";
@@ -139,8 +140,7 @@ export default function StylesPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Styles</h1>
+      <PageHeader title="Styles">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {message && <span style={{ fontSize: 13, color: "var(--success)" }}>{message}</span>}
           <ScopeToggle />
@@ -150,7 +150,7 @@ export default function StylesPage() {
             <button onClick={saveOverlay} disabled={saving} className="btn btn-primary">{saving ? "Saving..." : "Save Overrides"}</button>
           )}
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         {loading && <p>Loading...</p>}
 

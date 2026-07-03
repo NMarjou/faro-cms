@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { GlossaryTerm } from "@/lib/types";
+import PageHeader from "@/components/PageHeader";
 import { useCurrentProject } from "@/components/CurrentProjectProvider";
 
 type Scope = "shared" | "project";
@@ -131,8 +132,7 @@ export default function GlossaryPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Glossary</h1>
+      <PageHeader title="Glossary">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {message && <span style={{ fontSize: 13, color: "var(--success)" }}>{message}</span>}
           <ScopeToggle />
@@ -140,7 +140,7 @@ export default function GlossaryPage() {
             {saving ? "Saving..." : scope === "shared" ? "Save All" : "Save Overrides"}
           </button>
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         {loading && <p>Loading...</p>}
 
