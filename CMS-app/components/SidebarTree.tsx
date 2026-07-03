@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
-import { useTabContext } from "./TabContext";
 import { useTheme } from "./ThemeProvider";
 import FaroLogo from "./FaroLogo";
 import Icon from "./Icon";
@@ -69,7 +68,12 @@ export default function SidebarTree() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const createMenuRef = useRef<HTMLDivElement>(null);
-  const { openTab, activeFile } = useTabContext();
+  // The article/snippet currently open in the editor, derived from the URL
+  // (/editor/<encoded file>) — articles open as full-page editor routes.
+  const currentEditorFile =
+    pathname && pathname.startsWith("/editor/")
+      ? decodeURIComponent(pathname.slice("/editor/".length))
+      : null;
   const { theme, toggle: toggleTheme } = useTheme();
 
   // Folder creation state
@@ -261,11 +265,11 @@ export default function SidebarTree() {
   );
 
   const renderArticle = (article: TocArticle) => {
-    const active = article.file === activeFile;
+    const active = article.file === currentEditorFile;
     return (
       <button
         key={article.slug}
-        onClick={() => openTab(article.file, article.title)}
+        onClick={() => router.push(`/editor/${encodeURIComponent(article.file)}`)}
         draggable
         onDragStart={(e) => handleDragStart(e, { type: "article", name: article.title, file: article.file })}
         className={`tree-leaf${active ? " tree-active" : ""}`}
@@ -355,11 +359,11 @@ export default function SidebarTree() {
     snippetsData?.snippets.filter((s) => s.folder === folder) || [];
 
   const renderSnippetLeaf = (snippet: { name: string; file: string }) => {
-    const active = snippet.file === activeFile;
+    const active = snippet.file === currentEditorFile;
     return (
       <button
         key={snippet.file}
-        onClick={() => openTab(snippet.file, snippet.name)}
+        onClick={() => router.push(`/editor/${encodeURIComponent(snippet.file)}`)}
         draggable
         onDragStart={(e) => handleDragStart(e, { type: "snippet", name: snippet.name, file: snippet.file })}
         className={`tree-leaf${active ? " tree-active" : ""}`}
