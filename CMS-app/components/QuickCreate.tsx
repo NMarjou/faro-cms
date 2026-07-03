@@ -48,7 +48,7 @@ export default function QuickCreate() {
     <div ref={ref} style={{ position: "relative" }}>
       <button
         onClick={() => setOpen((p) => !p)}
-        className="btn btn-sm"
+        className="btn btn-sm btn-primary"
         aria-haspopup="menu"
         aria-expanded={open}
         title="Create new…"
