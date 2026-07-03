@@ -92,8 +92,9 @@ export default function NewArticlePage() {
               <input
                 className="input"
                 value={slug}
-                onChange={(e) => setSlug(e.target.value)}
+                readOnly
                 placeholder="article-slug"
+                style={{ background: "var(--bg-secondary, var(--bg-tertiary))", color: "var(--fg-muted)", cursor: "not-allowed" }}
               />
               <p style={{ fontSize: 12, color: "var(--fg-muted)", marginTop: 4 }}>
                 Used in the file name and URL. Auto-generated from the title.
