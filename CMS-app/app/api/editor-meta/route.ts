@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { currentProjectSlug } from "@/lib/content-paths";
-import { getCachedFile, listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
-import { loadMergedVariablesFlat, loadMergedGlossary, loadMergedConditions } from "@/lib/merged-config";
+import { listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
+import { loadMergedVariablesFlat, loadMergedGlossary, loadMergedConditions, loadMergedStyles } from "@/lib/merged-config";
 import { memoize } from "@/lib/cache";
 
 /**
@@ -23,15 +23,6 @@ type EditorMeta = {
   snippetNames: string[];
 };
 
-async function loadJson(path: string): Promise<unknown | null> {
-  try {
-    const file = await getCachedFile(`content/${path}`);
-    return JSON.parse(file.content);
-  } catch {
-    return null;
-  }
-}
-
 async function loadVariables(): Promise<Record<string, string>> {
   // Merges the current project's overlay over shared (flattened) for the editor.
   return loadMergedVariablesFlat();
@@ -51,12 +42,12 @@ async function loadSnippetNames(): Promise<string[]> {
 
 export async function GET(request: NextRequest) {
   setRequestProject(request);
-  const [variables, conditionsMerged, glossaryMerged, stylesRaw, snippetNames] =
+  const [variables, conditionsMerged, glossaryMerged, stylesMerged, snippetNames] =
     await Promise.all([
       loadVariables(),
       loadMergedConditions(),
       loadMergedGlossary(),
-      loadJson("styles.json"),
+      loadMergedStyles(),
       loadSnippetNames(),
     ]);
 
@@ -67,7 +58,7 @@ export async function GET(request: NextRequest) {
       colors: conditionsMerged.merged.colors || {},
     },
     glossary: { terms: glossaryMerged.merged.terms },
-    styles: Array.isArray(stylesRaw) ? stylesRaw : [],
+    styles: stylesMerged.merged,
     snippetNames,
   };
 
