@@ -15,6 +15,7 @@ import type {
   Variables, VariableSet, VariableSetsData,
   Glossary, GlossaryTerm,
   ConditionsConfig,
+  ContentStyle,
 } from "./types";
 
 /** Per-set, per-key origin so the manager can badge shared vs project. */
@@ -203,4 +204,55 @@ export async function loadMergedConditions(
   const overlayFile = await readProjectOverlay("conditions.json");
   const overlay = overlayFile ? toConditions(overlayFile.content) : null;
   return mergeConditions(shared, overlay);
+}
+
+// ── Styles (list keyed by CSS class) ────────────────────────────────────────
+
+/** Per-class origin so the manager can badge shared vs project. */
+export type StyleScopes = Record<string, "shared" | "project">;
+
+/**
+ * Merge a sparse project overlay over the shared styles. Styles match by
+ * `class`; an overlay style overrides its shared twin (name/element) in place,
+ * and overlay-only styles are appended as project-scoped.
+ */
+export function mergeStyles(
+  shared: ContentStyle[],
+  overlay: ContentStyle[] | null
+): { merged: ContentStyle[]; scopes: StyleScopes } {
+  const scopes: StyleScopes = {};
+  const overlayByClass = new Map<string, ContentStyle>((overlay ?? []).map((s) => [s.class, s]));
+  const seen = new Set<string>();
+  const merged: ContentStyle[] = [];
+
+  for (const s of shared) {
+    const ov = overlayByClass.get(s.class);
+    seen.add(s.class);
+    scopes[s.class] = ov ? "project" : "shared";
+    merged.push(ov ?? s);
+  }
+  for (const ov of overlay ?? []) {
+    if (seen.has(ov.class)) continue;
+    scopes[ov.class] = "project";
+    merged.push(ov);
+  }
+  return { merged, scopes };
+}
+
+function toStyles(content: string): ContentStyle[] {
+  const data = JSON.parse(content);
+  return Array.isArray(data) ? (data as ContentStyle[]) : [];
+}
+
+/** Merged styles for the current project (shared + overlay) with scopes. */
+export async function loadMergedStyles(
+  ref?: string
+): Promise<{ merged: ContentStyle[]; scopes: StyleScopes }> {
+  let shared: ContentStyle[] = [];
+  try {
+    shared = toStyles((await getCachedFile("content/styles.json", ref)).content);
+  } catch { /* none yet */ }
+  const overlayFile = await readProjectOverlay("styles.json");
+  const overlay = overlayFile ? toStyles(overlayFile.content) : null;
+  return mergeStyles(shared, overlay);
 }

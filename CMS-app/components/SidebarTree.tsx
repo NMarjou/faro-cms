@@ -796,6 +796,13 @@ export default function SidebarTree() {
           Glossary
         </Link>
 
+        {techWriter && (
+          <Link href="/styles" className={`tree-nav-link${pathname === "/styles" ? " active" : ""}`}>
+            <Icon name="palette" />
+            Styles
+          </Link>
+        )}
+
         {/* TOOLS section */}
         <div className="tree-section-label">TOOLS</div>
 
