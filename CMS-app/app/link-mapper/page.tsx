@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
@@ -197,8 +198,7 @@ export default function LinkMapperPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Link Mapper</h1>
+      <PageHeader title="Link Mapper">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {result && mappedCount > 0 && (
             <button
@@ -217,7 +217,7 @@ export default function LinkMapperPage() {
             {scanning ? "Scanning..." : "Scan Articles"}
           </button>
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         <p style={{ color: "var(--fg-muted)", marginBottom: 16, fontSize: 14 }}>
           Scan all articles for unresolved internal links (e.g. from Madcap Flare imports) and map them to CMS articles.

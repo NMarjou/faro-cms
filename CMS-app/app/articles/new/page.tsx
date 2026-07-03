@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import PageHeader from "@/components/PageHeader";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
@@ -60,9 +61,8 @@ export default function NewArticlePage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>New Article</h1>
-      </header>
+      <PageHeader title="New Article">
+      </PageHeader>
       <div className="main-body">
         <div className="card" style={{ maxWidth: 500 }}>
           {error && (

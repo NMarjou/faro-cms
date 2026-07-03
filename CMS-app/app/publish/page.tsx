@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import type { Toc, TocCategory } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { canPublish } from "@/lib/permissions";
@@ -207,8 +208,7 @@ export default function PublishPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Publish</h1>
+      <PageHeader title="Publish">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {result && (
             <button className="btn" onClick={handleDownload}>
@@ -233,7 +233,7 @@ export default function PublishPage() {
             {compiling ? "Compiling..." : `Compile ${totalSelected} article${totalSelected !== 1 ? "s" : ""}`}
           </button>
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         <p style={{ color: "var(--fg-muted)", marginBottom: 16, fontSize: 14 }}>
           Select which categories to compile for publication. Articles will be compiled with all snippets and variables resolved to their final values.

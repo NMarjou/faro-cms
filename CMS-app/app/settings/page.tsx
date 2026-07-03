@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import PageHeader from "@/components/PageHeader";
 import { signOut } from "next-auth/react";
 import { useTheme } from "@/components/ThemeProvider";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -99,9 +100,8 @@ export default function UserSettingsPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>User Settings</h1>
-      </header>
+      <PageHeader title="User Settings">
+      </PageHeader>
       <div className="main-body">
         {/* Identity */}
         <div className="card" style={{ maxWidth: 600, marginBottom: 16 }}>

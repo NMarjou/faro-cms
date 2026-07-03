@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import PageHeader from "@/components/PageHeader";
 import dynamic from "next/dynamic";
 import type { VariableSetsData } from "@/lib/types";
 import { DragHandle } from "@/components/SortableList";
@@ -233,8 +234,7 @@ export default function VariablesPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>Variables</h1>
+      <PageHeader title="Variables">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {message && <span style={{ fontSize: 13, color: "var(--success)" }}>{message}</span>}
           <ScopeToggle />
@@ -251,7 +251,7 @@ export default function VariablesPage() {
             </button>
           )}
         </div>
-      </header>
+      </PageHeader>
       <div className="main-body">
         {loading && <p>Loading...</p>}
 

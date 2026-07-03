@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
 import type { QAIssue } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -113,12 +114,11 @@ export default function QAPage() {
 
   return (
     <>
-      <header className="main-header">
-        <h1>QA Dashboard</h1>
+      <PageHeader title="QA Dashboard">
         <button onClick={runScan} className="btn btn-primary" disabled={loading}>
           {loading ? "Scanning..." : "Re-scan"}
         </button>
-      </header>
+      </PageHeader>
       <div className="main-body">
         {loading && <p>Scanning content for issues...</p>}
 

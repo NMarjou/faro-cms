@@ -7,11 +7,10 @@ import { useCurrentUser } from "./CurrentUserProvider";
 import { canCreateArticles, canManageImages, isTechWriter } from "@/lib/permissions";
 
 /**
- * Global quick-create shortcut — a floating action button fixed to the
- * bottom-right on every page, so creating content is always one click away
- * (the sidebar's create menu is tech-writer-only and hides when the sidebar
- * collapses). Actions are role-gated; the FAB hides entirely for roles that
- * can't create anything (e.g. contributors).
+ * Quick-create shortcut — a "+ New" button that lives in the page header next
+ * to the title, so creating content is one click away on every page. Actions
+ * are role-gated; renders nothing for roles that can't create anything (e.g.
+ * contributors). Reuses the sidebar create-menu dropdown styles.
  */
 export default function QuickCreate() {
   const router = useRouter();
@@ -19,7 +18,6 @@ export default function QuickCreate() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click / Escape.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -47,60 +45,34 @@ export default function QuickCreate() {
   const go = (href: string) => { setOpen(false); router.push(href); };
 
   return (
-    <div
-      ref={ref}
-      style={{ position: "fixed", right: 24, bottom: 24, zIndex: 90, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}
-    >
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="btn btn-sm btn-primary"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Create new…"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <Icon name="plus" size={14} weight="bold" />
+        New
+      </button>
       {open && (
-        <div
-          role="menu"
-          style={{
-            display: "flex", flexDirection: "column", gap: 6,
-            background: "var(--bg-elevated, var(--bg))",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            padding: 6,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.16)",
-            minWidth: 180,
-          }}
-        >
+        <div className="create-menu-dropdown" role="menu" style={{ right: "auto", left: 0 }}>
           {actions.map((a) => (
             <button
               key={a.href + a.label}
               role="menuitem"
+              className="create-menu-item"
               onClick={() => go(a.href)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "8px 10px", borderRadius: "calc(var(--radius) - 2px)",
-                border: "none", background: "none", cursor: "pointer",
-                color: "var(--fg)", fontSize: 14, fontFamily: "inherit", textAlign: "left", width: "100%",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, var(--border))")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+              style={{ display: "flex", alignItems: "center", gap: 10 }}
             >
-              <Icon name={a.icon} size={16} />
+              <Icon name={a.icon} size={15} />
               {a.label}
             </button>
           ))}
         </div>
       )}
-      <button
-        onClick={() => setOpen((p) => !p)}
-        aria-label="Create new"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Create new…"
-        style={{
-          width: 52, height: 52, borderRadius: "50%",
-          background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 6px 18px rgba(0,0,0,0.22)",
-          transition: "transform 0.15s ease",
-          transform: open ? "rotate(45deg)" : "none",
-        }}
-      >
-        <Icon name="plus" size={24} weight="bold" />
-      </button>
     </div>
   );
 }
