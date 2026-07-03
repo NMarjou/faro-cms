@@ -7,7 +7,7 @@ import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 export default function NewArticlePage() {
   const router = useRouter();
-  const { user, role, loaded } = useCurrentUser();
+  const { role, loaded } = useCurrentUser();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
@@ -32,47 +32,21 @@ export default function NewArticlePage() {
     setError(null);
 
     try {
-      const filePath = `${slug}.html`;
-      const content = `<h1>${title}</h1>\n<p>Start writing here...</p>\n`;
-
-      const res = await fetch("/api/content", {
-        method: "PUT",
+      // Single authorized step: writes the body AND inserts the TOC entry with
+      // the creator stamped as owner server-side. Authors go through here too
+      // (the old flow's direct PUT /api/toc is tech-writer-only, so it 403'd for
+      // authors and lost the entry — leaving their article read-only).
+      const res = await fetch("/api/article/create", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: filePath,
-          content,
-          message: `Create new article: ${title}`,
-        }),
+        body: JSON.stringify({ title, slug }),
       });
-
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to create article");
       }
-
-      // Add to TOC as standalone article
-      const tocRes = await fetch("/api/toc");
-      if (tocRes.ok) {
-        const toc = await tocRes.json();
-        if (!toc.articles) toc.articles = [];
-        toc.articles.push({
-          title,
-          file: filePath,
-          slug,
-          format: "html",
-          createdDate: new Date().toISOString().split("T")[0],
-          lastModified: new Date().toISOString().split("T")[0],
-          // Record the creator as the owner — gates who may edit it later.
-          ...(user?.email ? { author: user.email } : {}),
-        });
-        await fetch("/api/toc", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ toc, message: `Add ${title} to TOC` }),
-        });
-      }
-
-      router.push(`/editor/${encodeURIComponent(filePath)}`);
+      const { path } = await res.json();
+      router.push(`/editor/${encodeURIComponent(path)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create");
     } finally {
