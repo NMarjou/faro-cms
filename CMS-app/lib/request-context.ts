@@ -70,14 +70,23 @@ async function resolveBranches(slug: string): Promise<{ working: string; base: s
  * Bind the request's project (and its resolved branches) to the current async
  * context. Reads the `x-cms-project` header; falls back to the env/default
  * project when absent. `await` at the top of a content route handler.
+ *
+ * IMPORTANT: `enterWith` must run SYNCHRONOUSLY (before any await), otherwise
+ * the store is set on this function's continuation rather than the caller's
+ * async context and `getCurrentProject()` silently reverts to the default for
+ * the whole request. So we enter first with the project + env-default branches,
+ * then mutate the *same* store object in place once the manifest resolves.
  */
 export async function setRequestProject(request: Request): Promise<void> {
   const project =
     request.headers.get(PROJECT_HEADER) ||
     process.env.CMS_DEFAULT_PROJECT ||
     DEFAULT_PROJECT_SLUG;
+  const store: RequestStore = { project, working: envWorking(), base: envBase() };
+  als.enterWith(store);
   const { working, base } = await resolveBranches(project);
-  als.enterWith({ project, working, base });
+  store.working = working;
+  store.base = base;
 }
 
 /** The project for the current request, or the env/default when none is set. */
