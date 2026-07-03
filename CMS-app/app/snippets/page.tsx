@@ -39,10 +39,16 @@ export default function SnippetsPage() {
   const [currentFolder, setCurrentFolder] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [overriding, setOverriding] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Friendly name of the active project for override copy/badges.
   const projectLabel =
     projects.find((p) => p.slug === project)?.name || project || "this project";
+
+  const flashError = (msg: string) => { setError(msg); setTimeout(() => setError(null), 5000); };
+  // Surface a failed write instead of silently reloading an unchanged list.
+  const errFrom = async (res: Response, fallback: string) =>
+    (await res.json().catch(() => ({}))).error || fallback;
 
   const [creatingAt, setCreatingAt] = useState<CreatingAt>(null);
   const [newName, setNewName] = useState("");
@@ -81,53 +87,55 @@ export default function SnippetsPage() {
   const handleCreate = async () => {
     const name = newName.trim();
     if (!name || !creatingAt) { cancelCreation(); return; }
+    const isFolder = creatingAt.type === "folder";
+    const slug = generateSlug(name);
+    let body: Record<string, string>;
     if (creatingAt.type === "folder") {
-      const slug = generateSlug(name);
       const folderPath = creatingAt.parent ? `${creatingAt.parent}/${slug}` : slug;
-      await fetch("/api/content", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: `snippets/${folderPath}/.gitkeep`, content: "", message: `Create snippet folder: ${name}` }),
-      });
-      setExpanded((prev) => new Set([...prev, folderPath]));
-      loadSnippets();
+      body = { path: `snippets/${folderPath}/.gitkeep`, content: "", message: `Create snippet folder: ${name}` };
     } else {
-      const slug = generateSlug(name);
       const folder = creatingAt.folder;
       const filePath = folder ? `snippets/${folder}/${slug}.html` : `snippets/${slug}.html`;
-      await fetch("/api/content", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: filePath, content: `<!--name:${name}-->\n<p>Snippet content here.</p>\n`, message: `Create snippet: ${name}` }),
-      });
-      loadSnippets();
+      body = { path: filePath, content: `<!--name:${name}-->\n<p>Snippet content here.</p>\n`, message: `Create snippet: ${name}` };
     }
     cancelCreation();
+    try {
+      const res = await fetch("/api/content", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { flashError(await errFrom(res, `Couldn't create ${isFolder ? "folder" : "snippet"}`)); return; }
+      if (isFolder) {
+        const folderPath = body.path.replace(/^snippets\//, "").replace(/\/\.gitkeep$/, "");
+        setExpanded((prev) => new Set([...prev, folderPath]));
+      }
+      loadSnippets();
+    } catch { flashError("Network error — please retry."); }
   };
 
   const deleteSnippet = async (snippet: SnippetInfo) => {
-    const msg = snippet.shared
-      ? `Delete shared snippet "${snippet.name}"?\n\nThis snippet is shared — deleting it removes it from ALL projects.`
-      : `Delete ${projectLabel}'s copy of "${snippet.name}"? The shared version is restored.`;
-    if (!confirm(msg)) return;
+    // The × only appears on shared snippets (a project-specific one is removed
+    // via "Revert to shared"), so this always deletes from the shared pool.
+    if (!confirm(`Delete shared snippet "${snippet.name}"?\n\nThis snippet is shared — deleting it removes it from ALL projects.`)) return;
     setDeleting(snippet.file);
     try {
-      await fetch("/api/content", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: snippet.file, message: `Delete snippet: ${snippet.name}` }) });
+      const res = await fetch("/api/content", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: snippet.file, message: `Delete snippet: ${snippet.name}` }) });
+      if (!res.ok) { flashError(await errFrom(res, "Couldn't delete snippet")); return; }
       loadSnippets();
-    } catch (err) { console.error(err); } finally { setDeleting(null); }
+    } catch { flashError("Network error — please retry."); } finally { setDeleting(null); }
   };
 
   // "Make project-specific": fork the shared snippet into the current project.
   const makeProjectSpecific = async (snippet: SnippetInfo) => {
     setOverriding(snippet.file);
     try {
-      await fetch("/api/snippets/override", {
+      const res = await fetch("/api/snippets/override", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file: snippet.file }),
       });
+      if (!res.ok) { flashError(await errFrom(res, `Couldn't make "${snippet.name}" project-specific`)); return; }
       loadSnippets();
-    } catch (err) { console.error(err); } finally { setOverriding(null); }
+    } catch { flashError("Network error — please retry."); } finally { setOverriding(null); }
   };
 
   // "Revert to shared": drop this project's override, restoring the shared copy.
@@ -135,9 +143,10 @@ export default function SnippetsPage() {
     if (!confirm(`Revert "${snippet.name}" to the shared version?\n\nThis discards ${projectLabel}'s copy and any changes made to it.`)) return;
     setOverriding(snippet.file);
     try {
-      await fetch(`/api/snippets/override?file=${encodeURIComponent(snippet.file)}`, { method: "DELETE" });
+      const res = await fetch(`/api/snippets/override?file=${encodeURIComponent(snippet.file)}`, { method: "DELETE" });
+      if (!res.ok) { flashError(await errFrom(res, `Couldn't revert "${snippet.name}"`)); return; }
       loadSnippets();
-    } catch (err) { console.error(err); } finally { setOverriding(null); }
+    } catch { flashError("Network error — please retry."); } finally { setOverriding(null); }
   };
 
   const startCreating = (at: CreatingAt) => { setCreatingAt(at); setNewName(""); };
@@ -249,13 +258,17 @@ export default function SnippetsPage() {
             {overriding === snippet.file ? "..." : <ForkIcon />}
           </button>
         ) : (
-          <button className="tree-add-btn tree-add-btn-hover" title="Revert to shared" disabled={overriding === snippet.file} onClick={() => revertToShared(snippet)}>
+          <button className="tree-add-btn tree-add-btn-hover" title={`Revert to shared (discard ${projectLabel}'s copy)`} disabled={overriding === snippet.file} onClick={() => revertToShared(snippet)}>
             {overriding === snippet.file ? "..." : <RevertIcon />}
           </button>
         )}
-        <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete snippet" disabled={deleting === snippet.file} onClick={() => deleteSnippet(snippet)}>
-          {deleting === snippet.file ? "..." : "\u00d7"}
-        </button>
+        {/* Delete is a shared-pool action; a project-specific snippet is removed
+            via Revert (its shared twin always exists), so no \u00d7 on those rows. */}
+        {snippet.shared && (
+          <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete shared snippet" disabled={deleting === snippet.file} onClick={() => deleteSnippet(snippet)}>
+            {deleting === snippet.file ? "..." : "\u00d7"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -317,13 +330,20 @@ export default function SnippetsPage() {
     <>
       <header className="main-header">
         <h1>Snippets</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {error && <span style={{ fontSize: 13, color: "var(--danger)" }}>{error}</span>}
           <button className="btn" onClick={() => startCreating({ type: "folder", parent: currentFolder })}>New Folder</button>
           <button className="btn btn-primary" onClick={() => startCreating({ type: "snippet", folder: currentFolder })}>New Snippet</button>
         </div>
       </header>
       <div className="main-body">
         <Breadcrumbs />
+
+        {!loading && (rootSnippets.length > 0 || rootFolders.length > 0) && (
+          <p style={{ fontSize: 12, color: "var(--fg-muted)", margin: "0 0 10px" }}>
+            New snippets are shared across all projects; use the fork icon to make one project-specific. Snippet order is shared across projects.
+          </p>
+        )}
 
         {loading && <p>Loading...</p>}
 
