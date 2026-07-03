@@ -44,7 +44,7 @@ function findBlockingArticles(toc: Toc): Array<{ file: string; title: string }> 
 }
 
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canPublish(user?.role ?? null)) return forbidden("Only tech writers can publish");
   try {
@@ -58,9 +58,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Publish opens a PR from the branch editor saves land on (the working
-    // branch by default) into the repo's default branch. The head must exist
-    // and must differ from base; otherwise GitHub will refuse the PR.
+    // "Publish all" opens a PR from this project's working branch into the
+    // canonical default branch — NOT the per-project base branch. It ships a
+    // project's whole working state to the default branch; per-project base
+    // targeting applies to the isolated per-article publish. `head` is the
+    // current project's working branch (resolved in the request context).
     const base = defaultBranch();
     const head = explicitBranch || workingBranch();
 
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Working branch equals the default branch — nothing to publish. Set CMS_WORKING_BRANCH to a separate branch so edits land there first.",
+            "Working branch equals the default branch — nothing to publish. Set a separate working branch (env CMS_WORKING_BRANCH or the project's publishTarget) so edits land there first.",
         },
         { status: 400 }
       );

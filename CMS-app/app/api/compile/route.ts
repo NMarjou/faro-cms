@@ -45,7 +45,7 @@ interface CompiledCategory {
  * By categories:    { categories: ["help", "apis"], ref?: string }
  */
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   try {
     const body = await request.json();
     const { path, all, categories: categorySlugs, ref, activeTags } = body;

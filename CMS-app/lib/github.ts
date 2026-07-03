@@ -1,6 +1,7 @@
 import { Octokit } from "octokit";
 import type { GitHubFile, GitHubTreeItem } from "./types";
 import { contentSubpathFromApp, subpathToContent } from "./content-paths";
+import { getCurrentWorkingBranch, getCurrentBaseBranch } from "./request-context";
 import { memoize, invalidatePrefix } from "./cache";
 
 // Content in the GitHub repo lives under CMS-content/, but the app addresses
@@ -33,55 +34,73 @@ function getRepo() {
   return { owner, repo: name };
 }
 
+// The canonical/global default branch (env). The per-project base branch falls
+// back to this when a project has no publishTarget.baseBranch.
 export function defaultBranch(): string {
   return process.env.GITHUB_DEFAULT_BRANCH || "main";
 }
 
-// The branch all editor saves target when the caller doesn't specify one.
-// Falls back to defaultBranch() if CMS_WORKING_BRANCH is unset, so behavior
-// is unchanged for installs that haven't opted in to the guardrail.
+// The branch editor saves target when the caller doesn't specify one — now the
+// CURRENT project's working (draft) branch, resolved into the request context
+// from its publishTarget (env fallback outside a request / when unset).
 export function workingBranch(): string {
-  return process.env.CMS_WORKING_BRANCH || defaultBranch();
+  return getCurrentWorkingBranch();
 }
 
-let workingBranchEnsured = false;
-let ensurePromise: Promise<void> | null = null;
+// The current project's base (publish) branch — where per-article publish PRs
+// land. Falls back to defaultBranch() when the project has no publishTarget.
+export function baseBranch(): string {
+  return getCurrentBaseBranch();
+}
 
-// Make sure the working branch exists on the remote (forked from defaultBranch
-// if missing). Cheap after the first call per process: a single branchExists
-// round-trip, then a short-circuit. If working === default, nothing to do.
-//
-// Concurrent callers share a single in-flight promise so we don't race on
-// branchExists/createBranch — a single request that triggers several parallel
-// getFile/putFile calls (e.g. the review-done gate's 3 parallel sidecar
-// reads) would otherwise issue several createBranch attempts and the
-// trailing ones would hit GitHub's "Reference already exists" (422).
-export function ensureWorkingBranch(): Promise<void> {
-  if (workingBranchEnsured) return Promise.resolve();
-  if (ensurePromise) return ensurePromise;
-  ensurePromise = (async () => {
-    const wb = workingBranch();
-    if (wb === defaultBranch()) {
-      workingBranchEnsured = true;
+// Per-branch memoization: with per-project working/base branches there are now
+// several branches to ensure over a process's life, not one.
+const ensuredBranches = new Set<string>();
+const ensureInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Make sure `name` exists on the remote, forking from `fromRef` (default:
+ * defaultBranch()) if missing. Cheap after the first success per branch.
+ * Concurrent callers share one in-flight promise per branch so we don't race
+ * on branchExists/createBranch (parallel getFile/putFile in a single request);
+ * a 422 "already exists" from a lost race is treated as success.
+ */
+export function ensureBranch(name: string, fromRef?: string): Promise<void> {
+  if (ensuredBranches.has(name)) return Promise.resolve();
+  const inflight = ensureInFlight.get(name);
+  if (inflight) return inflight;
+  const from = fromRef || defaultBranch();
+  const p = (async () => {
+    if (name === from) {
+      ensuredBranches.add(name);
       return;
     }
-    const exists = await branchExists(wb);
-    if (!exists) {
+    if (!(await branchExists(name))) {
       try {
-        await createBranch(wb);
+        await createBranch(name, from);
       } catch (err) {
-        // 422 here means a parallel caller (or a previous failed attempt
-        // whose flag didn't latch) already created the branch. Safe to
-        // treat as success.
         const status = (err as { status?: number })?.status;
         if (status !== 422) throw err;
       }
     }
-    workingBranchEnsured = true;
+    ensuredBranches.add(name);
   })().finally(() => {
-    ensurePromise = null;
+    ensureInFlight.delete(name);
   });
-  return ensurePromise;
+  ensureInFlight.set(name, p);
+  return p;
+}
+
+/**
+ * Ensure the current project's working branch exists — forking its base branch
+ * from the global default first (so a project with a not-yet-created base still
+ * works), then the working branch from that base. Called by every ref-less
+ * getFile/putFile.
+ */
+export async function ensureWorkingBranch(): Promise<void> {
+  const base = baseBranch();
+  await ensureBranch(base, defaultBranch());
+  await ensureBranch(workingBranch(), base);
 }
 
 // ── Read operations (subpath-addressed core; CMS-content-relative) ──

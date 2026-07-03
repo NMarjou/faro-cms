@@ -18,7 +18,7 @@ async function loadOrder(folder: string): Promise<string[]> {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   try {
     // listOverridable returns the union of shared + project-local images (the
     // project override shadowing its shared twin) with each entry's origin.
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canManageImages(user?.role ?? null)) return forbidden();
   try {

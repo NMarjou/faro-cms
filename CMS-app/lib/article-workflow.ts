@@ -119,6 +119,35 @@ export function articleFilesFromRepoPaths(repoPaths: string[]): string[] {
 }
 
 /**
+ * Group a PR's changed article bodies by the PROJECT they belong to, so the
+ * post-merge webhook can mark "published" in the right project's TOC (the
+ * flat `articleFilesFromRepoPaths` throws the slug away). Keys are project
+ * slugs; values are content-relative `file` paths (e.g. "help/x.mdx"). Only
+ * project-scoped article bodies count — shared assets (CMS-content/shared/…),
+ * snippet/image overrides, and toc.json/config are excluded.
+ */
+export function articleFilesByProject(repoPaths: string[]): Map<string, string[]> {
+  const byProject = new Map<string, string[]>();
+  for (const p of repoPaths) {
+    if (!p.startsWith(REPO_CONTENT_PREFIX)) continue;
+    const sub = p.slice(REPO_CONTENT_PREFIX.length); // projects/<slug>/<rel> | shared/… | <platform>
+    if (!sub.startsWith("projects/")) continue; // only project content is publishable per-project
+    const slug = sub.split("/")[1];
+    if (!slug) continue;
+    const file = subpathToContent(sub).slice("content/".length); // <rel>, e.g. help/x.mdx
+    if (
+      !ARTICLE_EXT.test(file) ||
+      file.startsWith("snippets/") ||
+      file.startsWith("images/")
+    ) {
+      continue;
+    }
+    (byProject.get(slug) ?? byProject.set(slug, []).get(slug)!).push(file);
+  }
+  return byProject;
+}
+
+/**
  * Mark articles published. Walks the TOC (categories → sections → subsections
  * + standalone) and sets `published: true` + `publishedAt` on every entry whose
  * `file` is in `files`. Returns the mutated TOC and the files it matched. Pure

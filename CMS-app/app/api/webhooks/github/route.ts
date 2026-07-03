@@ -2,15 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getFile, putFile } from "@/lib/storage";
 import { getPullFiles, defaultBranch } from "@/lib/github";
-import { articleFilesFromRepoPaths, markPublishedInToc } from "@/lib/article-workflow";
+import { runWithProject } from "@/lib/request-context";
+import { loadProjects } from "@/lib/projects";
+import { articleFilesByProject, markPublishedInToc } from "@/lib/article-workflow";
 import type { Toc } from "@/lib/types";
 
 /**
  * GitHub webhook — the post-merge hook that makes "Published" reachable.
  *
- * When a publish PR merges into the default branch, flip `published: true` on
- * the working-branch TOC for the article(s) it shipped, so the editor/list/
- * dashboard/search (which read the working branch) surface "Published".
+ * When a publish PR merges into a project's base (publish) branch, flip
+ * `published: true` on that PROJECT's working-branch TOC for the article(s) it
+ * shipped, so the editor/list/dashboard/search (which read the working branch)
+ * surface "Published". The PR is attributed to a project by the `projects/<slug>/`
+ * folder of its changed files, so a single merge can update several projects,
+ * and any configured per-project base branch is honored.
  *
  * Configure in the repo: Settings → Webhooks → payload URL
  * `<origin>/api/webhooks/github`, content type application/json, a secret
@@ -58,12 +63,20 @@ export async function POST(request: NextRequest) {
   }
 
   const pr = payload.pull_request;
-  const merged =
-    payload.action === "closed" &&
-    pr?.merged === true &&
-    pr?.base?.ref === defaultBranch();
-  if (!merged) {
-    return NextResponse.json({ ok: true, ignored: "not a merge to default branch" });
+  const baseRef = pr?.base?.ref;
+  if (payload.action !== "closed" || pr?.merged !== true || !baseRef) {
+    return NextResponse.json({ ok: true, ignored: "not a merged PR" });
+  }
+
+  // Act on merges into any publish target — the global default branch, or any
+  // project's configured base branch.
+  const projects = await loadProjects();
+  const validBases = new Set<string>([
+    defaultBranch(),
+    ...projects.map((p) => p.publishTarget?.baseBranch).filter((b): b is string => !!b),
+  ]);
+  if (!validBases.has(baseRef)) {
+    return NextResponse.json({ ok: true, ignored: "not a publish-target branch" });
   }
 
   try {
@@ -72,25 +85,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, marked: [] });
     }
 
-    const articleFiles = articleFilesFromRepoPaths(await getPullFiles(prNumber));
-    if (articleFiles.length === 0) {
+    // Attribute changed article bodies to their project, then mark each in that
+    // project's own working-branch TOC (status reads the working branch).
+    const byProject = articleFilesByProject(await getPullFiles(prNumber));
+    if (byProject.size === 0) {
       return NextResponse.json({ ok: true, marked: [] });
     }
 
-    // Status reads the working branch, so the flag lands there.
-    const tocFile = await getFile("content/toc.json");
-    const toc = JSON.parse(tocFile.content) as Toc;
     const publishedAt = new Date().toISOString();
-    const { marked } = markPublishedInToc(toc, new Set(articleFiles), publishedAt);
-
-    if (marked.length > 0) {
-      await putFile(
-        "content/toc.json",
-        JSON.stringify(toc, null, 2),
-        `Mark published: ${marked.join(", ")} (PR #${prNumber})`
-      );
+    const allMarked: string[] = [];
+    for (const [slug, files] of byProject) {
+      await runWithProject(slug, async () => {
+        const tocFile = await getFile("content/toc.json");
+        const toc = JSON.parse(tocFile.content) as Toc;
+        const { marked } = markPublishedInToc(toc, new Set(files), publishedAt);
+        if (marked.length > 0) {
+          await putFile(
+            "content/toc.json",
+            JSON.stringify(toc, null, 2),
+            `Mark published: ${marked.join(", ")} (${slug}, PR #${prNumber})`
+          );
+          allMarked.push(...marked.map((f) => `${slug}/${f}`));
+        }
+      });
     }
-    return NextResponse.json({ ok: true, marked });
+    return NextResponse.json({ ok: true, marked: allMarked });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Webhook handling failed";
     return NextResponse.json({ error: message }, { status: 500 });

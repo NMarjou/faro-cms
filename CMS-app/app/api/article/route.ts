@@ -8,7 +8,7 @@ import matter from "gray-matter";
  * Returns article content. Detects format by extension and content.
  */
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const filePath = request.nextUrl.searchParams.get("path");
   if (!filePath) {
     return NextResponse.json({ error: "path is required" }, { status: 400 });

@@ -23,7 +23,7 @@ function normalize(file: unknown): string | null {
 }
 
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canManageImages(user?.role ?? null)) return forbidden();
   try {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canManageImages(user?.role ?? null)) return forbidden();
   try {

@@ -21,7 +21,7 @@ async function loadSharedGlossary(): Promise<Glossary> {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const scope = request.nextUrl.searchParams.get("scope");
   if (scope === "shared") {
     return NextResponse.json(await loadSharedGlossary(), { headers: CACHE_HEADERS });
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest) {
 
 /** Clear this project's glossary overrides entirely (revert to fully shared). */
 export async function DELETE(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

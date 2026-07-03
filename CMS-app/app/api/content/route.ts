@@ -19,7 +19,7 @@ const CACHE_HEADERS = {
 };
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const path = request.nextUrl.searchParams.get("path");
   const ref = request.nextUrl.searchParams.get("ref") || undefined;
   const raw = request.nextUrl.searchParams.get("raw");
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   try {
     const body = await request.json();
     const { path, content, message, branch, sha } = body;
@@ -97,7 +97,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   try {
     const body = await request.json();
     const { path, message, branch } = body;

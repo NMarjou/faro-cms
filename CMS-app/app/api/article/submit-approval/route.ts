@@ -22,7 +22,7 @@ import { canSubmitForApproval } from "@/lib/permissions";
  * from the authenticated identity, not the request body.
  */
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const caller = await getRequestUser(request);
   try {
     const body = await request.json();

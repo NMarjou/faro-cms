@@ -33,7 +33,7 @@ async function getSearchIndex(): Promise<Fuse<SearchEntry>> {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const query = request.nextUrl.searchParams.get("q");
 
   if (!query || query.length < 2) {

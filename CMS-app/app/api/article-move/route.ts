@@ -107,7 +107,7 @@ function rewriteLinks(content: string, oldFile: string, newFile: string): string
 }
 
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

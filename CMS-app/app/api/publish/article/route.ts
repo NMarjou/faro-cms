@@ -6,7 +6,9 @@ import {
   createBranch,
   createPR,
   defaultBranch,
+  baseBranch,
   workingBranch,
+  ensureBranch,
 } from "@/lib/github";
 import { getRequestUser, findTocArticle, forbidden } from "@/lib/server-auth";
 import { canPublish } from "@/lib/permissions";
@@ -16,10 +18,12 @@ import type { Toc } from "@/lib/types";
 /**
  * POST /api/publish/article  Body: { path }
  *
- * Publish a SINGLE article as an isolated PR: a fresh branch off the default
- * branch carrying just this article's body plus its TOC entry merged onto the
- * default branch's TOC. Articles publish independently — an in-review article
- * never blocks shipping another, and each PR is reviewable on its own.
+ * Publish a SINGLE article as an isolated PR: a fresh branch off the current
+ * project's BASE (publish) branch carrying just this article's body plus its
+ * TOC entry merged onto that base branch's TOC. Articles publish independently
+ * — an in-review article never blocks shipping another, and each PR is
+ * reviewable on its own. The base branch is per-project (publishTarget), so
+ * each project ships to its own destination.
  *
  * Shared resources (snippets, variables, glossary, images, TOC structure) are
  * NOT included here — those go through the branch-wide "Publish all"
@@ -27,7 +31,7 @@ import type { Toc } from "@/lib/types";
  * the working branch will publish without it; publish the resource separately.
  */
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!canPublish(user?.role ?? null)) {
     return forbidden("Only tech writers can publish");
@@ -39,17 +43,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
 
-    const base = defaultBranch();
+    // Per-project publish target: base = this project's base branch, head =
+    // this project's working branch (both resolved in the request context).
+    const base = baseBranch();
     const head = workingBranch();
     if (head === base) {
       return NextResponse.json(
         {
           error:
-            "Working branch equals the default branch — nothing to publish. Set CMS_WORKING_BRANCH to a separate branch so edits land there first.",
+            "Working branch equals the base branch — nothing to publish. Set a separate working branch (env CMS_WORKING_BRANCH or the project's publishTarget) so edits land there first.",
         },
         { status: 400 }
       );
     }
+    // The project's base branch may not exist yet — fork it off the global
+    // default before branching the publish PR off it.
+    await ensureBranch(base, defaultBranch());
 
     // Source of truth for the article + its placement is the working-branch TOC.
     const workingTocFile = await getFile("content/toc.json", head);
