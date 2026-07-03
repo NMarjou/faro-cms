@@ -57,7 +57,7 @@ function sidecarPath(articleFile: string): string {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   let toc: Toc;
   try {
     const tocFile = await getFile("content/toc.json");

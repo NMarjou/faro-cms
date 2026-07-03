@@ -41,7 +41,7 @@ async function loadSnippetNames(): Promise<string[]> {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const [variables, conditionsMerged, glossaryMerged, stylesMerged, snippetNames] =
     await Promise.all([
       loadVariables(),

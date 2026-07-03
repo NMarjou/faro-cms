@@ -55,6 +55,9 @@ export default function PlatformSettingsPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [projBusy, setProjBusy] = useState(false);
   const [projMsg, setProjMsg] = useState<string | null>(null);
+  // Per-project publish-target branch drafts (keyed by slug).
+  const [ptDraft, setPtDraft] = useState<Record<string, { workingBranch: string; baseBranch: string }>>({});
+  const [ptBusy, setPtBusy] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -115,6 +118,34 @@ export default function PlatformSettingsPage() {
     });
     if (res.ok) await refreshProjects();
     else setProjMsg((await res.json().catch(() => ({}))).error || "Delete failed");
+  };
+
+  // Effective publish-target branch values (draft edits over the saved manifest).
+  const effPt = (p: Project) => ({
+    workingBranch: ptDraft[p.slug]?.workingBranch ?? p.publishTarget?.workingBranch ?? "",
+    baseBranch: ptDraft[p.slug]?.baseBranch ?? p.publishTarget?.baseBranch ?? "",
+  });
+  const setPt = (p: Project, field: "workingBranch" | "baseBranch", value: string) =>
+    setPtDraft((prev) => ({ ...prev, [p.slug]: { ...effPt(p), [field]: value } }));
+  const savePublishTarget = async (p: Project) => {
+    setPtBusy(p.slug);
+    setProjMsg(null);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: p.slug, publishTarget: effPt(p) }),
+      });
+      if (res.ok) {
+        await refreshProjects();
+        setPtDraft((prev) => { const n = { ...prev }; delete n[p.slug]; return n; });
+        setProjMsg(`Publish target saved for ${p.name}`);
+      } else {
+        setProjMsg((await res.json().catch(() => ({}))).error || "Failed to save publish target");
+      }
+    } finally {
+      setPtBusy(null);
+    }
   };
 
   useEffect(() => {
@@ -347,35 +378,63 @@ export default function PlatformSettingsPage() {
           <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 12 }}>
             Each project has its own table of contents and articles; images, snippets, styles
             and variables are shared across all projects. Switch the active project from the sidebar.
+            The <strong>publish target</strong> sets each project&apos;s draft (working) and published (base)
+            branches — leave blank to use the deployment defaults.
           </p>
           <div style={{ marginBottom: 12 }}>
-            {projects.map((p) => (
-              <div
-                key={p.slug}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 0",
-                  borderTop: "1px solid var(--border)",
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 500, fontSize: 14 }}>{p.name}</span>
-                  <span style={{ fontSize: 12, color: "var(--fg-muted)", marginLeft: 8 }}>{p.slug}</span>
-                  {p.default && <span className="badge" style={{ marginLeft: 8 }}>default</span>}
+            {projects.map((p) => {
+              const pt = effPt(p);
+              const ptChanged =
+                pt.workingBranch !== (p.publishTarget?.workingBranch ?? "") ||
+                pt.baseBranch !== (p.publishTarget?.baseBranch ?? "");
+              return (
+                <div key={p.slug} style={{ padding: "10px 0", borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 500, fontSize: 14 }}>{p.name}</span>
+                      <span style={{ fontSize: 12, color: "var(--fg-muted)", marginLeft: 8 }}>{p.slug}</span>
+                      {p.default && <span className="badge" style={{ marginLeft: 8 }}>default</span>}
+                    </div>
+                    <button className="btn btn-sm" onClick={() => renameProject(p.slug, p.name)}>Rename</button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => deleteProject(p.slug, p.name)}
+                      disabled={p.default || projects.length <= 1}
+                      title={p.default ? "Can't delete the default project" : "Remove from list"}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <label style={{ fontSize: 12, color: "var(--fg-muted)", minWidth: 90 }}>Publish target</label>
+                    <input
+                      className="input"
+                      value={pt.workingBranch}
+                      onChange={(e) => setPt(p, "workingBranch", e.target.value)}
+                      placeholder="working branch (draft)"
+                      style={{ fontFamily: "var(--font-mono)", fontSize: 12, maxWidth: 190 }}
+                      title="Branch edits/drafts for this project land on"
+                    />
+                    <span style={{ color: "var(--fg-muted)", fontSize: 12 }}>→</span>
+                    <input
+                      className="input"
+                      value={pt.baseBranch}
+                      onChange={(e) => setPt(p, "baseBranch", e.target.value)}
+                      placeholder="base branch (published)"
+                      style={{ fontFamily: "var(--font-mono)", fontSize: 12, maxWidth: 190 }}
+                      title="Branch this project publishes to"
+                    />
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => savePublishTarget(p)}
+                      disabled={!ptChanged || ptBusy === p.slug}
+                    >
+                      {ptBusy === p.slug ? "Saving…" : "Save"}
+                    </button>
+                  </div>
                 </div>
-                <button className="btn btn-sm" onClick={() => renameProject(p.slug, p.name)}>Rename</button>
-                <button
-                  className="btn btn-sm"
-                  onClick={() => deleteProject(p.slug, p.name)}
-                  disabled={p.default || projects.length <= 1}
-                  title={p.default ? "Can't delete the default project" : "Remove from list"}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input

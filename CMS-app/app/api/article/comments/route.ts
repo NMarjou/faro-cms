@@ -31,7 +31,7 @@ function sidecarPath(articleFile: string): string {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const path = request.nextUrl.searchParams.get("path");
   if (!path) {
     return NextResponse.json({ error: "path is required" }, { status: 400 });
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
 /** Comments are a review activity for all roles — require a known user, no role gate. */
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const caller = await getRequestUser(request);
   if (!caller) return forbidden();
   try {
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const caller = await getRequestUser(request);
   if (!caller) return forbidden();
   try {
@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const caller = await getRequestUser(request);
   if (!caller) return forbidden();
   try {

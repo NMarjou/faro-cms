@@ -63,7 +63,7 @@ async function countUnresolvedComments(articleFile: string): Promise<number> {
 }
 
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   // The reviewer is the authenticated caller — never trust a body-supplied
   // email. Tech writers can sign off any article; contributors only ones
   // they're assigned to (checked below).

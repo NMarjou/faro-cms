@@ -34,7 +34,7 @@ async function loadSharedConditions(): Promise<ConditionsConfig> {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   if (request.nextUrl.searchParams.get("scope") === "shared") {
     return NextResponse.json(await loadSharedConditions(), { headers: CACHE_HEADERS });
   }
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
@@ -67,7 +67,7 @@ export async function PUT(request: NextRequest) {
 
 /** Clear this project's condition overrides entirely (revert to fully shared). */
 export async function DELETE(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

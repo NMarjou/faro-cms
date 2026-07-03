@@ -33,7 +33,7 @@ async function loadSharedSets(ref?: string): Promise<VariableSetsData> {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const ref = request.nextUrl.searchParams.get("ref") || undefined;
   const format = request.nextUrl.searchParams.get("format");
   const scope = request.nextUrl.searchParams.get("scope");
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {
@@ -105,7 +105,7 @@ export async function PUT(request: NextRequest) {
 
 /** Clear this project's variable overrides entirely (revert to fully shared). */
 export async function DELETE(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

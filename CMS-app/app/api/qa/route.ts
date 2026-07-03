@@ -52,7 +52,7 @@ function extractWords(text: string): string[] {
 
 // ─── QA Route ───────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const issues: QAIssue[] = [];
 
   try {

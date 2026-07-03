@@ -100,7 +100,7 @@ function isInternalLink(href: string): boolean {
 
 // ─── GET: Scan all articles for unresolved links ────────────────────
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   try {
     const tocFile = await getFile("content/toc.json");
     const toc: Toc = JSON.parse(tocFile.content);
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
 
 // ─── POST: Apply link mappings ──────────────────────────────────────
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

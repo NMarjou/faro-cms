@@ -112,7 +112,7 @@ const CACHE_HEADERS = {
 };
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const full = request.nextUrl.searchParams.get("full") === "1";
 
   try {
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const user = await getRequestUser(request);
   if (!isTechWriter(user?.role ?? null)) return forbidden();
   try {

@@ -37,7 +37,7 @@ function newId(): string {
 }
 
 export async function GET(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const path = request.nextUrl.searchParams.get("path");
   if (!path) {
     return NextResponse.json({ error: "path is required" }, { status: 400 });
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   // Any signed-in user (tech-writer, author, or contributor) may suggest.
   // The suggestion's author is taken from the authenticated identity, not
   // the request body, so a caller can't post under someone else's name.

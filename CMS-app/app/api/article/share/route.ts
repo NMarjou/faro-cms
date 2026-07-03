@@ -25,7 +25,7 @@ import { isTechWriter } from "@/lib/permissions";
  * we treat removals as quiet to avoid mailbox noise during iteration.
  */
 export async function POST(request: NextRequest) {
-  setRequestProject(request);
+  await setRequestProject(request);
   const caller = await getRequestUser(request);
   if (!isTechWriter(caller?.role ?? null)) return forbidden();
   try {
