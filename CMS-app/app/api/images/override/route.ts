@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { isOverridable } from "@/lib/content-paths";
-import { makeProjectSpecific, revertToShared, hasProjectOverride } from "@/lib/storage";
+import { makeProjectSpecific, revertToShared, hasProjectOverride, hasSharedFile } from "@/lib/storage";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { canManageImages } from "@/lib/permissions";
 
@@ -14,11 +14,12 @@ import { canManageImages } from "@/lib/permissions";
  * Ownership metadata stays in the single shared manifest — a fork inherits it.
  */
 
+// This is the IMAGES override endpoint — accept only image paths (not any
+// overridable asset), so it can't be used to fork snippets past their own gate.
 function normalize(file: unknown): string | null {
   if (typeof file !== "string" || !file.trim()) return null;
   const rel = file.replace(/^content\//, "");
-  // Only override-capable shared assets, and no path traversal.
-  if (!isOverridable(rel) || rel.includes("..")) return null;
+  if (!rel.startsWith("images/") || !isOverridable(rel) || rel.includes("..")) return null;
   return rel;
 }
 
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest) {
     if (!rel) return NextResponse.json({ error: "Invalid file" }, { status: 400 });
     if (await hasProjectOverride(rel)) {
       return NextResponse.json({ scope: "project", alreadyOverridden: true });
+    }
+    if (!(await hasSharedFile(rel))) {
+      return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
     await makeProjectSpecific(rel);
     return NextResponse.json({ scope: "project" });

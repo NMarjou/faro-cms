@@ -36,10 +36,16 @@ export default function ImagesPage() {
   const [currentFolder, setCurrentFolder] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [overriding, setOverriding] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Friendly name of the active project for override copy/badges.
   const projectLabel =
     projects.find((p) => p.slug === project)?.name || project || "this project";
+
+  const flashError = (msg: string) => { setError(msg); setTimeout(() => setError(null), 5000); };
+  // Surface a failed write instead of silently reloading an unchanged list.
+  const errFrom = async (res: Response, fallback: string) =>
+    (await res.json().catch(() => ({}))).error || fallback;
   const [uploading, setUploading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ImageInfo | null>(null);
@@ -86,14 +92,17 @@ export default function ImagesPage() {
     const slug = generateSlug(name);
     const parent = creatingFolder || "";
     const folderPath = parent ? `${parent}/${slug}` : slug;
-    await fetch("/api/content", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: `images/${folderPath}/.gitkeep`, content: "", message: `Create image folder: ${name}` }),
-    });
-    setExpanded((prev) => new Set([...prev, folderPath]));
     cancelFolderCreation();
-    loadImages();
+    try {
+      const res = await fetch("/api/content", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: `images/${folderPath}/.gitkeep`, content: "", message: `Create image folder: ${name}` }),
+      });
+      if (!res.ok) { flashError(await errFrom(res, "Couldn't create folder")); return; }
+      setExpanded((prev) => new Set([...prev, folderPath]));
+      loadImages();
+    } catch { flashError("Network error — please retry."); }
   };
 
   const handleUpload = async (files: FileList) => {
@@ -104,11 +113,12 @@ export default function ImagesPage() {
         formData.append("file", file);
         if (currentFolder) formData.append("folder", currentFolder);
         if (user?.email) formData.append("owner", user.email);
-        await fetch("/api/upload", { method: "POST", body: formData });
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        if (!res.ok) { flashError(await errFrom(res, `Upload failed for "${file.name}"`)); break; }
       }
       loadImages();
-    } catch (err) {
-      console.error(err);
+    } catch {
+      flashError("Network error during upload — please retry.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -116,28 +126,29 @@ export default function ImagesPage() {
   };
 
   const deleteImage = async (image: ImageInfo) => {
-    const msg = image.shared
-      ? `Delete shared image "${image.name}"?\n\nThis image is shared — deleting it removes it from ALL projects.`
-      : `Delete ${projectLabel}'s copy of "${image.name}"? The shared version is restored.`;
-    if (!confirm(msg)) return;
+    // The × only appears on shared images (a project-specific one is removed via
+    // "Revert to shared"), so this always deletes from the shared pool.
+    if (!confirm(`Delete shared image "${image.name}"?\n\nThis image is shared — deleting it removes it from ALL projects.`)) return;
     setDeleting(image.file);
     try {
-      await fetch("/api/content", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: image.file, message: `Delete image: ${image.name}` }) });
+      const res = await fetch("/api/content", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: image.file, message: `Delete image: ${image.name}` }) });
+      if (!res.ok) { flashError(await errFrom(res, "Couldn't delete image")); return; }
       loadImages();
-    } catch (err) { console.error(err); } finally { setDeleting(null); }
+    } catch { flashError("Network error — please retry."); } finally { setDeleting(null); }
   };
 
   // "Make project-specific": fork the shared image into the current project.
   const makeProjectSpecific = async (image: ImageInfo) => {
     setOverriding(image.file);
     try {
-      await fetch("/api/images/override", {
+      const res = await fetch("/api/images/override", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file: image.file }),
       });
+      if (!res.ok) { flashError(await errFrom(res, `Couldn't make "${image.name}" project-specific`)); return; }
       loadImages();
-    } catch (err) { console.error(err); } finally { setOverriding(null); }
+    } catch { flashError("Network error — please retry."); } finally { setOverriding(null); }
   };
 
   // "Revert to shared": drop this project's override, restoring the shared copy.
@@ -145,9 +156,10 @@ export default function ImagesPage() {
     if (!confirm(`Revert "${image.name}" to the shared version?\n\nThis discards ${projectLabel}'s copy.`)) return;
     setOverriding(image.file);
     try {
-      await fetch(`/api/images/override?file=${encodeURIComponent(image.file)}`, { method: "DELETE" });
+      const res = await fetch(`/api/images/override?file=${encodeURIComponent(image.file)}`, { method: "DELETE" });
+      if (!res.ok) { flashError(await errFrom(res, `Couldn't revert "${image.name}"`)); return; }
       loadImages();
-    } catch (err) { console.error(err); } finally { setOverriding(null); }
+    } catch { flashError("Network error — please retry."); } finally { setOverriding(null); }
   };
 
   const handleReorderImages = async (folder: string, newItems: { id: string }[]) => {
@@ -266,8 +278,10 @@ export default function ImagesPage() {
             {overriding === image.file ? "..." : <RevertIcon />}
           </button>
         ))}
-        {canDeleteImage(role, image, user?.email) && (
-          <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete image" disabled={deleting === image.file} onClick={() => deleteImage(image)}>
+        {/* Delete is a shared-pool action; a project-specific image is removed
+            via Revert (its shared twin always exists), so no \u00d7 on those rows. */}
+        {image.shared && canDeleteImage(role, image, user?.email) && (
+          <button className="tree-add-btn tree-add-btn-hover" style={{ color: "var(--danger)", fontSize: 14 }} title="Delete shared image" disabled={deleting === image.file} onClick={() => deleteImage(image)}>
             {deleting === image.file ? "..." : "\u00d7"}
           </button>
         )}
@@ -330,7 +344,8 @@ export default function ImagesPage() {
     <>
       <header className="main-header">
         <h1>Images</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {error && <span style={{ fontSize: 13, color: "var(--danger)" }}>{error}</span>}
           <button className="btn" onClick={() => { setCreatingFolder(currentFolder || ""); setNewFolderName(""); }}>New Folder</button>
           <button className="btn btn-primary" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
             {uploading ? "Uploading..." : "Upload Image"}

@@ -263,7 +263,11 @@ export async function writeProjectOverlay(
 /** Delete the current project's overlay of `rel` (clear all its overrides). */
 export async function deleteProjectOverlay(rel: string, message: string): Promise<void> {
   invalidate(FILE_KEY(projectSubpath(rel)));
-  await deleteFileAtSub(projectSubpath(rel), message);
+  // Idempotent: skip when there's no overlay (GitHub backend would otherwise
+  // 500 on the SHA lookup for a missing file).
+  if (await existsAtSub(projectSubpath(rel))) {
+    await deleteFileAtSub(projectSubpath(rel), message);
+  }
 }
 
 export { isLocal };
