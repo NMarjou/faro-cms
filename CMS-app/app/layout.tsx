@@ -8,9 +8,7 @@ import {
   Spectral,
 } from "next/font/google";
 import SidebarTree from "@/components/SidebarTree";
-import { TabProvider } from "@/components/TabContext";
 import ThemeProvider from "@/components/ThemeProvider";
-import Workspace from "@/components/Workspace";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
 import { CurrentProjectProvider } from "@/components/CurrentProjectProvider";
 import AuthProvider from "@/components/AuthProvider";
@@ -89,14 +87,10 @@ export default function RootLayout({
           <AuthProvider>
             <CurrentUserProvider authConfigured={isAuthConfigured()}>
               <CurrentProjectProvider>
-                <TabProvider>
-                  <div className="app-layout">
-                    <SidebarTree />
-                    <main className="main-content">
-                      <Workspace>{children}</Workspace>
-                    </main>
-                  </div>
-                </TabProvider>
+                <div className="app-layout">
+                  <SidebarTree />
+                  <main className="main-content">{children}</main>
+                </div>
               </CurrentProjectProvider>
             </CurrentUserProvider>
           </AuthProvider>
