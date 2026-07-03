@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
+  canCreateArticles,
   canEditArticle,
   canPublish,
   canSubmitForApproval,
@@ -100,6 +101,7 @@ export default function EditorPage() {
   // and share a single banner between contributor and tech-writer flows.
   const [warning, setWarning] = useState<string | null>(null);
   const [articleMeta, setArticleMeta] = useState<TocArticle | null>(null);
+  const [adopting, setAdopting] = useState(false);
   const [format, setFormat] = useState<"html" | "mdx">("html");
   const [initialContent, setInitialContent] = useState<JSONContent | null>(null);
   const [initialHtml, setInitialHtml] = useState<string>("");
@@ -176,7 +178,9 @@ export default function EditorPage() {
     // into /api/editor-meta to dodge the browser 6-connection limit and
     // per-route dev-compile cost.
     const articlePromise = fetch(`/api/article?path=${encodeURIComponent(filePath)}`);
-    const tocPromise = isSnippet ? null : fetch("/api/toc").catch(() => null);
+    // no-store: /api/toc is browser-cacheable (max-age=60), but the editor must
+    // see the current TOC entry — e.g. right after adopting an orphan on reload.
+    const tocPromise = isSnippet ? null : fetch("/api/toc", { cache: "no-store" }).catch(() => null);
     const metaPromise = fetch("/api/editor-meta").catch(() => null);
 
     (async () => {
@@ -668,6 +672,32 @@ export default function EditorPage() {
     }
   };
 
+  // Recover an orphaned article: a body with no TOC entry (invisible in nav,
+  // read-only for authors). Adds the entry server-side, stamping the caller as
+  // owner, then loads the fresh meta so the editor becomes editable.
+  const handleAdopt = async () => {
+    setAdopting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/article/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: filePath }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to add to TOC");
+      // Set the fresh entry directly (the endpoint returns it). canEdit flips
+      // true; the Editor is keyed on canEdit so it re-mounts cleanly in edit
+      // mode rather than toggling review→edit in place (which races React and
+      // ProseMirror over the DOM — a removeChild crash).
+      if (data.entry) { setArticleMeta(data.entry); setOriginalMeta({ ...data.entry }); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add to TOC");
+    } finally {
+      setAdopting(false);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -863,6 +893,30 @@ export default function EditorPage() {
         />
       )}
       <div className="main-body article-editor">
+        {/* Orphan recovery: this article body isn't in the table of contents,
+            so it's invisible in nav and (for authors) read-only. Offer to add
+            it — the caller becomes its owner. */}
+        {!isSnippet && !articleMeta && canCreateArticles(role) && (
+          <div
+            style={{
+              background: "var(--warning-light)",
+              color: "var(--warning)",
+              padding: "10px 16px",
+              borderRadius: "var(--radius)",
+              marginBottom: 16,
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <Icon name="warning" size={16} />
+            <span style={{ flex: 1 }}>This article isn&apos;t in the table of contents, so it can&apos;t be edited yet.</span>
+            <button className="btn btn-sm btn-primary" onClick={handleAdopt} disabled={adopting}>
+              {adopting ? "Adding…" : "Add to table of contents"}
+            </button>
+          </div>
+        )}
         {/* Reviewer-facing banner: surfaces the tech writer's sign-off so
             non-editors (contributors, and authors on articles they don't own)
             understand why Suggest Changes disappeared. */}
@@ -1041,6 +1095,9 @@ export default function EditorPage() {
         )}
         {viewMode === "visual" && userLoaded && (
           <Editor
+            // Re-mount on an edit⇄review flip (e.g. adopting an orphan) so the
+            // TipTap instance is rebuilt rather than toggled in place.
+            key={canEdit ? "edit" : "review"}
             filePath={filePath}
             assignedTo={articleMeta?.assignedTo}
             reviewsDone={articleMeta?.reviewsDone}
