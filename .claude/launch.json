@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cms-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "CMS-app", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}
