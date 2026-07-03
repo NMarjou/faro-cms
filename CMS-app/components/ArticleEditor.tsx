@@ -4,6 +4,14 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import type { JSONContent } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import { useTabContext } from "./TabContext";
+import { useCurrentUser } from "./CurrentUserProvider";
+import {
+  isTechWriter,
+  canEditArticle,
+  canPublish,
+  canSubmitForApproval,
+  ownsArticle,
+} from "@/lib/permissions";
 import Icon from "./Icon";
 import type {
   Variables,
@@ -58,6 +66,8 @@ interface ArticleEditorProps {
 
 export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
   const { markDirty, closeTab } = useTabContext();
+  const { user, role, loaded: userLoaded } = useCurrentUser();
+  const currentEmail = user?.email ?? null;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,6 +96,24 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
   const editorRef = useRef<{ getHTML: () => string; getSelectedText: () => string } | null>(null);
   const loadedRef = useRef(false);
   const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
+
+  // ── Permission gating ──
+  // Tech writers edit anything; authors edit only articles they own; everyone
+  // else is read-only (view + comment/suggest). Snippets are tech-writer-only.
+  // Wait for articleMeta before granting an author edit so we don't flash an
+  // editable surface before ownership is known.
+  const canEdit =
+    userLoaded &&
+    (isTechWriter(role)
+      ? true
+      : isSnippet
+        ? false
+        : !!articleMeta && canEditArticle(role, articleMeta, currentEmail));
+  const canPub = canPublish(role);
+  const isOwner = ownsArticle(articleMeta, currentEmail);
+  const isSubmitted = articleMeta?.approvalStatus === "submitted";
+  const showSubmitForApproval =
+    !isSnippet && canSubmitForApproval(role, articleMeta, currentEmail) && !isSubmitted;
 
   // Sync dirty state to tab context
   useEffect(() => { markDirty(filePath, isDirty); }, [isDirty, filePath, markDirty]);
@@ -197,6 +225,7 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
   };
 
   const handleSave = async () => {
+    if (!canEdit) return; // read-only surfaces never write
     setSaving(true);
     setError(null);
     try {
@@ -233,10 +262,28 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
   saveRef.current = handleSave;
 
   useEffect(() => {
-    if (autosaveInterval <= 0) return;
+    if (!canEdit || autosaveInterval <= 0) return;
     const timer = setInterval(() => { if (isDirty && !saving) saveRef.current?.(); }, autosaveInterval * 1000);
     return () => clearInterval(timer);
-  }, [autosaveInterval, isDirty, saving]);
+  }, [canEdit, autosaveInterval, isDirty, saving]);
+
+  // Author requests tech-writer sign-off for an owned article (their path to
+  // "publish", since only tech writers can open the publish PR).
+  const handleSubmitForApproval = async () => {
+    setError(null);
+    try {
+      if (isDirty) await handleSave();
+      const res = await fetch("/api/article/submit-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: filePath }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Submit failed"); }
+      setArticleMeta((p) => (p ? { ...p, approvalStatus: "submitted" } : p));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submit failed");
+    }
+  };
 
   const handlePublish = async () => {
     await handleSave();
@@ -274,34 +321,57 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
           ) : null}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div
-            className="view-toggle"
-            onClick={() => {
-              if (viewMode === "visual") {
-                // Capture selected text before switching
-                const selectedText = editorRef.current?.getSelectedText() || "";
-                if (isDirty) handleSave();
-                if (editorRef.current) setRawSource(formatHtml(editorRef.current.getHTML()));
-                setSourceHighlight(selectedText || undefined);
-                setViewMode("source");
-              } else {
-                if (isDirty) handleSave();
-                setSourceHighlight(undefined);
-                setViewMode("visual");
-              }
-            }}
-          >
-            <span className={`view-toggle-label${viewMode === "visual" ? " active" : ""}`}>Visual</span>
-            <div className={`view-toggle-track${viewMode === "source" ? " on" : ""}`}>
-              <div className="view-toggle-thumb" />
+          {!isSnippet && !canEdit && (
+            <span style={{ fontSize: 12, color: "var(--fg-muted)" }} title="You have view + comment/suggest access to this article">
+              Read-only
+            </span>
+          )}
+          {canEdit && (
+            <div
+              className="view-toggle"
+              onClick={() => {
+                if (viewMode === "visual") {
+                  // Capture selected text before switching
+                  const selectedText = editorRef.current?.getSelectedText() || "";
+                  if (isDirty) handleSave();
+                  if (editorRef.current) setRawSource(formatHtml(editorRef.current.getHTML()));
+                  setSourceHighlight(selectedText || undefined);
+                  setViewMode("source");
+                } else {
+                  if (isDirty) handleSave();
+                  setSourceHighlight(undefined);
+                  setViewMode("visual");
+                }
+              }}
+            >
+              <span className={`view-toggle-label${viewMode === "visual" ? " active" : ""}`}>Visual</span>
+              <div className={`view-toggle-track${viewMode === "source" ? " on" : ""}`}>
+                <div className="view-toggle-thumb" />
+              </div>
+              <span className={`view-toggle-label${viewMode === "source" ? " active" : ""}`}>Source</span>
             </div>
-            <span className={`view-toggle-label${viewMode === "source" ? " active" : ""}`}>Source</span>
-          </div>
-          <button onClick={() => setShowMeta((p) => !p)} className={`btn btn-sm${showMeta ? " btn-primary" : ""}`} title="Article metadata">Meta</button>
-          <button onClick={handleSave} disabled={saving || !isDirty} className="btn" style={{ opacity: saving || !isDirty ? 0.5 : 1, padding: "6px 10px" }} title={saving ? "Saving..." : "Save (Ctrl+S)"}>
-            <Icon name="floppy-disk" size={16} title="Save" />
-          </button>
-          <button onClick={handlePublish} className="btn btn-primary">Publish</button>
+          )}
+          {canEdit && (
+            <button onClick={() => setShowMeta((p) => !p)} className={`btn btn-sm${showMeta ? " btn-primary" : ""}`} title="Article metadata">Meta</button>
+          )}
+          {canEdit && (
+            <button onClick={handleSave} disabled={saving || !isDirty} className="btn" style={{ opacity: saving || !isDirty ? 0.5 : 1, padding: "6px 10px" }} title={saving ? "Saving..." : "Save (Ctrl+S)"}>
+              <Icon name="floppy-disk" size={16} title="Save" />
+            </button>
+          )}
+          {/* Publishing opens the PR — tech-writer only. An owning author instead
+              submits for sign-off; once submitted, a disabled indicator shows. */}
+          {canPub && (
+            <button onClick={handlePublish} className="btn btn-primary">Publish</button>
+          )}
+          {showSubmitForApproval && (
+            <button onClick={handleSubmitForApproval} className="btn btn-gold" title="Submit this article for a tech writer to review and publish">
+              Submit for approval
+            </button>
+          )}
+          {!isSnippet && isOwner && isSubmitted && (
+            <button className="btn btn-sm" disabled title="Awaiting tech-writer sign-off" style={{ opacity: 0.6 }}>Submitted</button>
+          )}
         </div>
       </header>
       <div className="main-body article-editor">
@@ -350,6 +420,8 @@ export default function ArticleEditor({ file: filePath }: ArticleEditorProps) {
 
         {viewMode === "visual" && (
           <Editor
+            filePath={filePath}
+            mode={canEdit ? "full" : "review"}
             initialContent={format === "html" ? undefined : initialContent || undefined}
             initialHtml={format === "html" ? initialHtml : undefined}
             variables={variables}
