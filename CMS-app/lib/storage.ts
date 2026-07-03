@@ -203,6 +203,11 @@ export function hasProjectOverride(rel: string): Promise<boolean> {
   return existsAtSub(projectSubpath(rel));
 }
 
+/** Whether a shared-pool copy of this content-relative path exists. */
+export function hasSharedFile(rel: string): Promise<boolean> {
+  return existsAtSub(sharedSubpath(rel));
+}
+
 /**
  * Fork the shared copy of `rel` into the current project ("Make
  * project-specific"). Byte-exact copy so binary assets (images) survive.
@@ -212,9 +217,15 @@ export async function makeProjectSpecific(rel: string): Promise<void> {
   invalidateFileCache(`content/${rel}`);
 }
 
-/** Remove the current project's override of `rel`, restoring the shared copy. */
+/**
+ * Remove the current project's override of `rel`, restoring the shared copy.
+ * Idempotent: a no-op when there's no override (the GitHub backend would
+ * otherwise 500 on the SHA lookup for a missing file).
+ */
 export async function revertToShared(rel: string): Promise<void> {
-  await deleteFileAtSub(projectSubpath(rel), `Revert to shared: ${rel}`);
+  if (await existsAtSub(projectSubpath(rel))) {
+    await deleteFileAtSub(projectSubpath(rel), `Revert to shared: ${rel}`);
+  }
   invalidateFileCache(`content/${rel}`);
 }
 
