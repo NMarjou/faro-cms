@@ -16,6 +16,7 @@ function buildFuse(entries: SearchResult[]): Fuse<SearchResult> {
   return new Fuse(entries, {
     keys: [
       { name: "title", weight: 3 }, // object name — matches rank highest
+      { name: "tags", weight: 2 }, // article labels — find articles by tag
       { name: "subtitle", weight: 1 },
       { name: "bodyText", weight: 1 }, // full text (articles, snippets, defs…)
     ],

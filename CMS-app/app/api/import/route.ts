@@ -161,7 +161,6 @@ function convertFlareTocToCms(flareEntries: FlareTocEntry[]): Toc {
           file: filePath.toLowerCase(),
           format: "html",
           tags: [],
-          conditions: [],
         });
 
         // Recurse into subsection articles (4th level becomes more articles)
@@ -178,7 +177,6 @@ function convertFlareTocToCms(flareEntries: FlareTocEntry[]): Toc {
               file: subFile.toLowerCase(),
               format: "html",
               tags: [],
-              conditions: [],
             });
           }
         }

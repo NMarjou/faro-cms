@@ -5,8 +5,7 @@ export interface TocArticle {
   file: string; // relative path, e.g. "help/passport/overview.html"
   slug: string;
   format?: "html" | "mdx"; // default: "html"
-  tags?: string[];
-  conditions?: string[];
+  tags?: string[]; // labels — a subset of the conditions vocabulary
   createdDate?: string;
   lastModified?: string;
   author?: string; // owner — email of the user who created the article (gates edit rights for the author role)
@@ -70,7 +69,6 @@ export interface ArticleFrontmatter {
   category?: string;
   section?: string;
   tags?: string[];
-  conditions?: string[];
   lastModified?: string;
   author?: string;
 }
@@ -246,6 +244,8 @@ export interface SearchResult {
   assignedTo?: string[];
   reviewComplete?: boolean;
   published?: boolean;
+  /** Article labels (from the TOC entry) — searchable and shown as chips. */
+  tags?: string[];
   score?: number; // attached at query time (lower = better, Fuse convention)
 }
 
