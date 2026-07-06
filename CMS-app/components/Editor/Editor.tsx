@@ -95,10 +95,10 @@ interface EditorProps {
   // limited variant (Comment + Suggest Changes only).
   mode?: "full" | "review";
   onSuggestChanges?: () => void;
-  /** Gates the find/replace bar's Replace controls (Find stays available to
-   *  all). "enabled" for owners/tech-writers, "disabled" for non-owner authors,
-   *  "hidden" for contributors. */
-  replaceMode?: "enabled" | "disabled" | "hidden";
+  /** Whether the find/replace bar shows the Replace controls (Find stays
+   *  available to all). True for those who can edit (owners/tech-writers);
+   *  everyone else gets a Find-only bar. */
+  canReplace?: boolean;
 }
 
 export default function Editor({
@@ -132,7 +132,7 @@ export default function Editor({
   spellAddedCount,
   mode = "full",
   onSuggestChanges,
-  replaceMode = "enabled",
+  canReplace = true,
 }: EditorProps) {
   const isReview = mode === "review";
   const [showFindReplace, setShowFindReplace] = useState(false);
@@ -897,7 +897,7 @@ export default function Editor({
       </div>
       {editor && editor.isActive("table") && <TableToolbar editor={editor} />}
       {showFindReplace && editor && (
-        <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} replaceMode={replaceMode} />
+        <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} canReplace={canReplace} />
       )}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ flex: 1, overflow: "auto", display: "flex" }}>

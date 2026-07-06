@@ -7,17 +7,15 @@ interface FindReplaceProps {
   editor: Editor;
   onClose: () => void;
   /**
-   * Whether the Replace controls are available. Find is always usable (readers
-   * navigate text too); Replace is an edit action, so:
-   *   - "enabled"  — tech writers, and authors on articles they own
-   *   - "disabled" — authors on an article they don't own (shown, greyed, with
-   *                  a reason) so the capability is discoverable
-   *   - "hidden"   — contributors, who can't edit at all
+   * Whether the Replace controls are shown at all. Find is always usable
+   * (readers navigate text too); Replace is an edit action, so it's shown only
+   * for those who can edit (tech writers, and authors on articles they own).
+   * For everyone else the Replace field is invisible — a plain Find bar.
    */
-  replaceMode?: "enabled" | "disabled" | "hidden";
+  canReplace?: boolean;
 }
 
-export default function FindReplace({ editor, onClose, replaceMode = "enabled" }: FindReplaceProps) {
+export default function FindReplace({ editor, onClose, canReplace = true }: FindReplaceProps) {
   const [search, setSearch] = useState("");
   const [replace, setReplace] = useState("");
   const [matchCase, setMatchCase] = useState(false);
@@ -47,11 +45,8 @@ export default function FindReplace({ editor, onClose, replaceMode = "enabled" }
     findMatches();
   }, [findMatches]);
 
-  const replaceEnabled = replaceMode === "enabled";
-  const showReplace = replaceMode !== "hidden";
-
   const handleReplace = () => {
-    if (!search || !replaceEnabled) return;
+    if (!search || !canReplace) return;
     const { state } = editor;
     const { from, to } = state.selection;
     const selectedText = state.doc.textBetween(from, to);
@@ -64,7 +59,7 @@ export default function FindReplace({ editor, onClose, replaceMode = "enabled" }
   };
 
   const handleReplaceAll = () => {
-    if (!search || !replaceEnabled) return;
+    if (!search || !canReplace) return;
     const text = editor.getText();
     const flags = matchCase ? "g" : "gi";
     const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
@@ -89,14 +84,12 @@ export default function FindReplace({ editor, onClose, replaceMode = "enabled" }
             if (e.key === "Escape") onClose();
           }}
         />
-        {showReplace && (
+        {canReplace && (
           <input
             className="input"
             value={replace}
             onChange={(e) => setReplace(e.target.value)}
             placeholder="Replace..."
-            disabled={!replaceEnabled}
-            title={!replaceEnabled ? "You can only replace text in articles you own" : undefined}
             style={{ flex: 1, padding: "4px 8px", fontSize: 13 }}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
@@ -120,28 +113,13 @@ export default function FindReplace({ editor, onClose, replaceMode = "enabled" }
               ? "No results"
               : ""}
         </span>
-        {replaceMode === "disabled" && (
-          <span style={{ fontSize: 12, color: "var(--fg-muted)", fontStyle: "italic" }}>
-            Replace is only available in articles you own
-          </span>
-        )}
         <div style={{ flex: 1 }} />
-        {showReplace && (
+        {canReplace && (
           <>
-            <button
-              onClick={handleReplace}
-              className="btn btn-sm"
-              disabled={!search || !replaceEnabled}
-              title={!replaceEnabled ? "You can only replace text in articles you own" : undefined}
-            >
+            <button onClick={handleReplace} className="btn btn-sm" disabled={!search}>
               Replace
             </button>
-            <button
-              onClick={handleReplaceAll}
-              className="btn btn-sm"
-              disabled={!search || !replaceEnabled}
-              title={!replaceEnabled ? "You can only replace text in articles you own" : undefined}
-            >
+            <button onClick={handleReplaceAll} className="btn btn-sm" disabled={!search}>
               Replace All
             </button>
           </>

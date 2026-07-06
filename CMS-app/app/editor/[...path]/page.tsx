@@ -157,11 +157,9 @@ export default function EditorPage() {
         ? false
         : !!articleMeta && canEditArticle(role, articleMeta, currentEmail));
   const isOwner = ownsArticle(articleMeta, currentEmail);
-  // Find/replace: Replace is an edit action. Contributors can't edit at all, so
-  // it's hidden; non-owner authors see it disabled (discoverable but gated);
-  // owners and tech writers (canEdit) get it enabled. Find stays available to all.
-  const replaceMode: "enabled" | "disabled" | "hidden" =
-    !role || role === "contributor" ? "hidden" : canEdit ? "enabled" : "disabled";
+  // Find/replace: Find is available to everyone; Replace is an edit action, so
+  // the Replace field is shown only to those who can edit (tech writers, and
+  // authors on articles they own). Everyone else gets a Find-only bar.
   const isSubmitted = articleMeta?.approvalStatus === "submitted";
   // Authors submit owned articles for tech-writer sign-off instead of publishing.
   const showSubmitForApproval =
@@ -1129,7 +1127,7 @@ export default function EditorPage() {
             onSave={handleSave}
             onEditorReady={(editor) => { editorRef.current = { getHTML: () => editor.getHTML(), getSelectedText: () => editor.getSelectedText(), setContent: (html: string) => { editor.commands.setContent(html); } }; }}
             mode={canEdit ? "full" : "review"}
-            replaceMode={replaceMode}
+            canReplace={canEdit}
             // Editor.tsx owns the unified ReviewSidebar + handler internally;
             // we don't pass onSuggestChanges so the internal handler wins.
             // Only editors get the source-view toggle — viewers (read-only)
