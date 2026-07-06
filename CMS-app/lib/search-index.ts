@@ -23,6 +23,15 @@ import {
 } from "./merged-config";
 import type { Toc, TocCategory, TocSection, TocArticle, SearchResult } from "./types";
 
+/**
+ * Deep link to a config-object's management page that scrolls to and flashes
+ * the specific entry. `key` identifies the row (matched against
+ * `data-highlight-id`); `scope` picks the shared/project view it lives in.
+ */
+function deepLink(page: string, key: string, scope: "shared" | "project"): string {
+  return `${page}?highlight=${encodeURIComponent(key)}&scope=${scope}`;
+}
+
 /** Collapse HTML/MDX to plain, searchable text. */
 function stripToText(src: string): string {
   return src
@@ -149,7 +158,8 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
         title: file.split("/").pop() || rel,
         subtitle: folderOf(rel, "images") || undefined,
         scope,
-        href: "/images",
+        // Opens the image's folder and preview modal on the Images page.
+        href: `/images?highlight=${encodeURIComponent(rel)}`,
       });
     }
   } catch {
@@ -168,7 +178,7 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
           subtitle: `${set.name} · ${value}`,
           bodyText: String(value),
           scope: scopes[set.slug]?.[key] ?? "shared",
-          href: "/variables",
+          href: deepLink("/variables", `${set.slug}.${key}`, scopes[set.slug]?.[key] ?? "shared"),
         });
       }
     }
@@ -187,7 +197,7 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
         subtitle: t.definition.slice(0, 100),
         bodyText: t.definition,
         scope: scopes[t.term] ?? "shared",
-        href: "/glossary",
+        href: deepLink("/glossary", t.term, scopes[t.term] ?? "shared"),
       });
     }
   } catch {
@@ -221,7 +231,7 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
         title: s.name,
         subtitle: `.${s.class}${s.element ? ` · ${s.element}` : ""}`,
         scope: scopes[s.class] ?? "shared",
-        href: "/styles",
+        href: deepLink("/styles", s.class, scopes[s.class] ?? "shared"),
       });
     }
   } catch {

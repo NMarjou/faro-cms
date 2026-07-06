@@ -6,6 +6,7 @@ import type { ContentStyle } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
+import { useHighlightParams, useFlashHighlight } from "@/components/searchHighlight";
 
 type Scope = "shared" | "project";
 type ClassScopes = Record<string, "shared" | "project">;
@@ -62,6 +63,13 @@ export default function StylesPage() {
   }, []);
 
   useEffect(() => { loadData(scope); }, [scope, loadData]);
+
+  // Search deep-link: open in the result's scope and flash the target class.
+  const { highlight, scope: wantScope } = useHighlightParams();
+  useEffect(() => {
+    if (wantScope === "shared" || wantScope === "project") setScope(wantScope);
+  }, [wantScope]);
+  useFlashHighlight(highlight, !loading && (!wantScope || scope === wantScope));
 
   // ── Shared mode ──
   const saveShared = async (updated: ContentStyle[]) => {
@@ -170,7 +178,7 @@ export default function StylesPage() {
               </thead>
               <tbody>
                 {styles.map((s, i) => (
-                  <tr key={i}>
+                  <tr key={i} data-highlight-id={s.class}>
                     <td style={cell}><input className="input" value={s.name} onChange={(e) => updateShared(i, "name", e.target.value)} /></td>
                     <td style={cell}><input className="input" style={{ fontFamily: "var(--font-mono)", fontSize: 13 }} value={s.class} onChange={(e) => updateShared(i, "class", e.target.value)} /></td>
                     <td style={cell}>
@@ -222,7 +230,7 @@ export default function StylesPage() {
                   const isProjectOnly = !(cls in sharedByClass);
                   const st = inOverlay ? overlay[cls] : sharedByClass[cls];
                   return (
-                    <tr key={cls}>
+                    <tr key={cls} data-highlight-id={cls}>
                       <td style={cell}><input className="input" value={st.name} disabled={!inOverlay} onChange={(e) => updateOv(cls, "name", e.target.value)} /></td>
                       <td style={{ ...cell, fontFamily: "var(--font-mono)", fontSize: 13 }}>{cls}</td>
                       <td style={cell}>

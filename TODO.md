@@ -13,3 +13,13 @@ once they ship.
   the split between global actions (search, "+ New") and page-specific actions,
   and how this reads on both standard pages (`PageHeader`) and the editor's own
   header.
+
+## Content model
+
+- **Review implementation of conditions.** Conditions (tags) have no dedicated
+  management page — they're applied to articles from `/toc`, with no per-tag
+  surface to view/edit/rename/delete a tag on its own. This is why search
+  results for conditions open `/toc` rather than deep-linking to the tag (unlike
+  variables/glossary/styles, which now deep-link + highlight the specific
+  entry). Revisit whether conditions deserve a proper manager; if so, wire
+  condition search results to deep-link into it.

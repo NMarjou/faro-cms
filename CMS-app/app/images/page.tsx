@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import { canManageImages, canDeleteImage } from "@/lib/permissions";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
+import { useHighlightParams } from "@/components/searchHighlight";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
   ssr: false,
@@ -73,6 +74,18 @@ export default function ImagesPage() {
 
   useEffect(() => { loadImages(); }, []);
   useEffect(() => { if (creatingFolder !== null && folderInputRef.current) folderInputRef.current.focus(); }, [creatingFolder]);
+
+  // Search deep-link: navigate to the image's folder and open its preview once.
+  const { highlight } = useHighlightParams();
+  const openedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading || !highlight || openedFor.current === highlight) return;
+    const img = data.images.find((i) => i.file === highlight);
+    if (!img) return;
+    openedFor.current = highlight;
+    setCurrentFolder(img.folder);
+    setViewing(img);
+  }, [loading, highlight, data.images]);
 
   const toggle = (folder: string) => {
     setExpanded((prev) => {
