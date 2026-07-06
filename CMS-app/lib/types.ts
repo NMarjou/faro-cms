@@ -217,19 +217,36 @@ export interface PublishResult {
 
 // ── Search ──
 
-export interface SearchEntry {
-  slug: string;
-  title: string;
-  category: string;
-  section: string;
-  bodyText: string; // stripped plain text for indexing
-  filePath: string;
-  // Status-derivable fields copied from the TOC entry so search results
-  // can render an ArticleStatusBadge without a second fetch. The badge
-  // helper derives status purely from these; no other fields needed.
+/** The kinds of object the cross-platform search can surface. */
+export type SearchObjectType =
+  | "article"
+  | "snippet"
+  | "image"
+  | "variable"
+  | "glossary"
+  | "condition"
+  | "style";
+
+/**
+ * A single unified search hit spanning every content object type. The index is
+ * contextual to the current project but includes shared objects (the merged
+ * loaders already union shared + project), with `scope` marking each hit's
+ * origin. `bodyText` is present only for full-text types (articles, snippets,
+ * glossary definitions, variable values); name-only types omit it.
+ */
+export interface SearchResult {
+  type: SearchObjectType;
+  id: string; // stable key, e.g. "glossary:SSO" or "article:help/x.html"
+  title: string; // the object's primary name/title (always searchable)
+  subtitle?: string; // context line: category/section, folder, set name, etc.
+  bodyText?: string; // stripped full text, when the object has one
+  scope: "shared" | "project";
+  href: string; // client route that opens the object
+  // Article-only status fields, mirrored so results can render a status badge.
   assignedTo?: string[];
   reviewComplete?: boolean;
   published?: boolean;
+  score?: number; // attached at query time (lower = better, Fuse convention)
 }
 
 // ── Glossary ──
