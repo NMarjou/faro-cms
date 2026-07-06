@@ -1,21 +1,20 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
-import Link from "next/link";
-import type { SearchEntry } from "@/lib/types";
-import ArticleStatusBadge from "@/components/ArticleStatusBadge";
+import SearchResultRow from "@/components/SearchResultRow";
+import type { SearchResult } from "@/lib/types";
 
 export default function SearchPage() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<(SearchEntry & { score?: number })[]>(
-    []
-  );
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const doSearch = useCallback(async (q: string) => {
-    if (q.length < 2) {
+    if (q.trim().length < 2) {
       setResults([]);
       setSearched(false);
       return;
@@ -25,7 +24,7 @@ export default function SearchPage() {
     setSearched(true);
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`);
       const data = await res.json();
       setResults(data.results || []);
     } catch {
@@ -37,8 +36,7 @@ export default function SearchPage() {
 
   return (
     <>
-      <PageHeader title="Search">
-      </PageHeader>
+      <PageHeader title="Search" />
       <div className="main-body">
         <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
           <input
@@ -46,66 +44,30 @@ export default function SearchPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && doSearch(query)}
-            placeholder="Search articles..."
+            placeholder="Search articles, snippets, images, variables, glossary…"
             style={{ maxWidth: 480 }}
           />
           <button
             onClick={() => doSearch(query)}
             className="btn btn-primary"
-            disabled={loading || query.length < 2}
+            disabled={loading || query.trim().length < 2}
           >
             {loading ? "Searching..." : "Search"}
           </button>
         </div>
 
         {results.length > 0 && (
-          <div>
-            <p
-              style={{
-                fontSize: 14,
-                color: "var(--fg-muted)",
-                marginBottom: 12,
-              }}
-            >
-              {results.length} results
+          <div style={{ maxWidth: 640 }}>
+            <p style={{ fontSize: 14, color: "var(--fg-muted)", marginBottom: 12 }}>
+              {results.length} result{results.length === 1 ? "" : "s"}
             </p>
             {results.map((result) => (
-              <Link
-                key={result.slug}
-                href={`/editor/${encodeURIComponent(result.filePath)}`}
-                style={{
-                  display: "block",
-                  padding: "12px 16px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
-                  marginBottom: 8,
-                  textDecoration: "none",
-                  color: "inherit",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <h3 style={{ fontSize: 15, margin: 0 }}>
-                    {result.title}
-                  </h3>
-                  <ArticleStatusBadge article={result} />
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <span className="badge badge-accent">{result.category}</span>
-                  <span className="badge">{result.section}</span>
-                </div>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "var(--fg-muted)",
-                    marginTop: 6,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {result.bodyText.slice(0, 200)}
-                </p>
-              </Link>
+              <SearchResultRow
+                key={result.id}
+                result={result}
+                onSelect={() => router.push(result.href)}
+                onOpen={() => router.push(result.href)}
+              />
             ))}
           </div>
         )}

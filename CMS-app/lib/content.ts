@@ -9,7 +9,6 @@ import type {
   Variables,
   ConditionsConfig,
   Snippet,
-  SearchEntry,
 } from "./types";
 import { getFile } from "./storage";
 import { loadMergedVariablesFlat, loadMergedConditions } from "./merged-config";
@@ -165,45 +164,4 @@ export async function getSnippet(
     }
   }
   throw new Error(`Snippet not found: ${name}`);
-}
-
-// ── Search Index ──
-
-export async function buildSearchEntries(
-  toc: Toc,
-  ref?: string
-): Promise<SearchEntry[]> {
-  const entries: SearchEntry[] = [];
-  for (const category of toc.categories) {
-    for (const section of category.sections) {
-      for (const article of section.articles) {
-        try {
-          const full = await getArticle(article.file, ref);
-          entries.push({
-            slug: article.slug,
-            title: full.frontmatter.title || article.title,
-            category: category.slug,
-            section: section.slug,
-            bodyText: stripMdx(full.content),
-            filePath: article.file,
-            assignedTo: article.assignedTo,
-            reviewComplete: article.reviewComplete,
-            published: article.published,
-          });
-        } catch {
-          // Skip articles that can't be loaded
-        }
-      }
-    }
-  }
-  return entries;
-}
-
-function stripMdx(mdx: string): string {
-  return mdx
-    .replace(/<[^>]+>/g, " ") // strip JSX/HTML tags
-    .replace(/\{[^}]+\}/g, " ") // strip expressions
-    .replace(/[#*_~`>\-|]/g, " ") // strip markdown formatting
-    .replace(/\s+/g, " ")
-    .trim();
 }

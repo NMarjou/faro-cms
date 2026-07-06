@@ -8,6 +8,7 @@ import {
   Spectral,
 } from "next/font/google";
 import SidebarTree from "@/components/SidebarTree";
+import SearchPanel from "@/components/SearchPanel";
 import ThemeProvider from "@/components/ThemeProvider";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
 import { CurrentProjectProvider } from "@/components/CurrentProjectProvider";
@@ -90,6 +91,7 @@ export default function RootLayout({
                 <div className="app-layout">
                   <SidebarTree />
                   <main className="main-content">{children}</main>
+                  <SearchPanel />
                 </div>
               </CurrentProjectProvider>
             </CurrentUserProvider>

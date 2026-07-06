@@ -568,6 +568,40 @@ export default function SidebarTree() {
       {/* Project switcher — scopes all content to the selected project. */}
       <ProjectSwitcher />
 
+      {/* Global search launcher — opens the non-modal search panel (also ⌘K). */}
+      <div style={{ padding: "0 12px 8px" }}>
+        <button
+          onClick={() => window.dispatchEvent(new Event("cms-open-search"))}
+          className="input"
+          title="Search everything (⌘K)"
+          style={{
+            width: "100%",
+            fontSize: 13,
+            cursor: "text",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            color: "var(--fg-muted)",
+          }}
+        >
+          <Icon name="magnifying-glass" size={14} />
+          <span style={{ flex: 1 }}>Search…</span>
+          <kbd
+            style={{
+              fontSize: 10,
+              fontFamily: "var(--font-mono)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              padding: "1px 5px",
+              color: "var(--fg-muted)",
+            }}
+          >
+            ⌘K
+          </kbd>
+        </button>
+      </div>
+
       <div className="sidebar-tree">
         {/* Dashboard */}
         <Link href="/" className={`tree-nav-link${pathname === "/" ? " active" : ""}`}>
