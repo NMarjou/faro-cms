@@ -1112,6 +1112,23 @@ button.tree-nav-link {
   box-shadow: 0 0 0 3px var(--accent-light);
 }
 
+/* A <button> styled to read as an input/select (e.g. the project switcher
+   trigger). Native buttons default to a gray UA background; force the same
+   surface as real inputs — white in light, --bg-secondary in dark (matching
+   the [data-theme="dark"] .input override above). */
+.input-trigger {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #fff;
+  color: var(--fg);
+}
+.input-trigger:hover {
+  border-color: var(--accent);
+}
+[data-theme="dark"] .input-trigger {
+  background: var(--bg-secondary);
+}
+
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
