@@ -8,6 +8,7 @@ import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
+import { useHighlightParams, useFlashHighlight } from "@/components/searchHighlight";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
   ssr: false,
@@ -84,6 +85,14 @@ export default function VariablesPage() {
 
   useEffect(() => { loadData(scope); }, [scope, loadData]);
   useEffect(() => { if (creatingSet && setInputRef.current) setInputRef.current.focus(); }, [creatingSet]);
+
+  // Search deep-link: open in the result's scope and flash the target variable
+  // (sets are auto-expanded on load, so the row is present).
+  const { highlight, scope: wantScope } = useHighlightParams();
+  useEffect(() => {
+    if (wantScope === "shared" || wantScope === "project") setScope(wantScope);
+  }, [wantScope]);
+  useFlashHighlight(highlight, !loading && (!wantScope || scope === wantScope));
 
   const generateSlug = (name: string) =>
     name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -283,7 +292,7 @@ export default function VariablesPage() {
                           items={varEntries.map(([k, v]) => ({ id: k, key: k, value: v }))}
                           onReorder={(items) => reorderVariables(set.slug, items)}
                           renderItem={(item, handleProps) => (
-                            <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+                            <div data-highlight-id={`${set.slug}.${item.key}`} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
                               <div style={{ padding: "6px 8px", display: "flex", alignItems: "center" }}>
                                 <DragHandle ref={handleProps.ref} {...handleProps.listeners} />
                               </div>
@@ -350,7 +359,7 @@ export default function VariablesPage() {
                         const isProjectOnly = !(key in (sharedVals[set.slug] || {}));
                         const value = inOverlay ? overlay[set.slug][key] : (sharedVals[set.slug]?.[key] ?? "");
                         return (
-                          <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid var(--border)", padding: "6px 0" }}>
+                          <div key={key} data-highlight-id={`${set.slug}.${key}`} style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid var(--border)", padding: "6px 0" }}>
                             <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, minWidth: 150 }}>{key}</div>
                             <span className={inOverlay ? "badge badge-accent" : "badge"} title={inOverlay ? `Specific to ${projectLabel}` : "Shared value"}>
                               {inOverlay ? projectLabel : "Shared"}

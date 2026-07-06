@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { GlossaryTerm } from "@/lib/types";
 import PageHeader from "@/components/PageHeader";
 import { useCurrentProject } from "@/components/CurrentProjectProvider";
+import { useHighlightParams, useFlashHighlight } from "@/components/searchHighlight";
 
 type Scope = "shared" | "project";
 type TermScopes = Record<string, "shared" | "project">;
@@ -56,6 +57,13 @@ export default function GlossaryPage() {
   }, []);
 
   useEffect(() => { loadData(scope); }, [scope, loadData]);
+
+  // Search deep-link: open in the result's scope and flash the target term.
+  const { highlight, scope: wantScope } = useHighlightParams();
+  useEffect(() => {
+    if (wantScope === "shared" || wantScope === "project") setScope(wantScope);
+  }, [wantScope]);
+  useFlashHighlight(highlight, !loading && (!wantScope || scope === wantScope));
 
   // ── Shared mode ──
   const saveShared = async (updated: GlossaryTerm[]) => {
@@ -159,7 +167,7 @@ export default function GlossaryPage() {
               </thead>
               <tbody>
                 {terms.map((t, i) => (
-                  <tr key={i}>
+                  <tr key={i} data-highlight-id={t.term}>
                     <td style={cell}><input className="input" value={t.term} onChange={(e) => updateSharedTerm(i, "term", e.target.value)} /></td>
                     <td style={cell}><input className="input" value={t.definition} onChange={(e) => updateSharedTerm(i, "definition", e.target.value)} /></td>
                     <td style={{ ...cell, textAlign: "center" }}>
@@ -200,7 +208,7 @@ export default function GlossaryPage() {
                   const isProjectOnly = !(term in sharedDefs);
                   const def = inOverlay ? overlay[term] : (sharedDefs[term] ?? "");
                   return (
-                    <tr key={term}>
+                    <tr key={term} data-highlight-id={term}>
                       <td style={{ ...cell, fontFamily: "var(--font-mono)", fontSize: 13 }}>{term}</td>
                       <td style={cell}>
                         <span className={inOverlay ? "badge badge-accent" : "badge"} title={inOverlay ? `Specific to ${projectLabel}` : "Shared definition"}>
