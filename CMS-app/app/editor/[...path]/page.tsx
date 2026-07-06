@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import Icon from "@/components/Icon";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import QuickCreate from "@/components/QuickCreate";
+import SearchButton from "@/components/SearchButton";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   canCreateArticles,
@@ -779,6 +780,7 @@ export default function EditorPage() {
           )}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <SearchButton />
           {canEdit && (
             <button
               onClick={() => setShowMeta((p) => !p)}

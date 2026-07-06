@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import QuickCreate from "./QuickCreate";
+import SearchButton from "./SearchButton";
 
 /**
  * Shared page header — the top bar every page renders. The title sits on the
  * left next to the global quick-create ("+ New") shortcut; page-specific
- * actions go on the right via `children`.
+ * actions go on the right via `children`, followed by the global search button.
  *
  *   <PageHeader title="Snippets">
  *     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -12,8 +13,9 @@ import QuickCreate from "./QuickCreate";
  *     </div>
  *   </PageHeader>
  *
- * `children` (the page's existing right-side actions block) is rendered as-is
- * on the right. `quickCreate={false}` opts a page out of the "+ New" shortcut.
+ * `children` (the page's existing right-side actions block) is rendered on the
+ * right, with the search icon pinned to the far-right corner.
+ * `quickCreate={false}` opts a page out of the "+ New" shortcut.
  */
 export default function PageHeader({
   title,
@@ -30,7 +32,10 @@ export default function PageHeader({
         {typeof title === "string" ? <h1>{title}</h1> : title}
         {quickCreate && <QuickCreate />}
       </div>
-      {children}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {children}
+        <SearchButton />
+      </div>
     </header>
   );
 }
