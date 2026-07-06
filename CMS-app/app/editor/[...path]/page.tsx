@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import QuickCreate from "@/components/QuickCreate";
 import SearchButton from "@/components/SearchButton";
+import { revealInExplorer } from "@/components/revealInExplorer";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   canCreateArticles,
@@ -784,6 +785,15 @@ export default function EditorPage() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <SearchButton />
+          <button
+            type="button"
+            onClick={() => revealInExplorer({ type: isSnippet ? "snippet" : "article", file: filePath })}
+            className="btn btn-icon"
+            title="Locate in project explorer"
+            aria-label="Locate in project explorer"
+          >
+            <Icon name="crosshair-simple" size={16} />
+          </button>
           {canEdit && (
             <button
               onClick={() => setShowMeta((p) => !p)}
