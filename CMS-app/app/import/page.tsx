@@ -288,7 +288,6 @@ function ArticlesTab() {
             file: m.path,
             format: "html",
             tags: [],
-            conditions: [],
           });
         }
       }

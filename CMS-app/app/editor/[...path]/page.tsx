@@ -9,6 +9,7 @@ import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import QuickCreate from "@/components/QuickCreate";
 import SearchButton from "@/components/SearchButton";
 import { revealInExplorer } from "@/components/revealInExplorer";
+import TagPicker from "@/components/TagPicker";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   canCreateArticles,
@@ -476,19 +477,16 @@ export default function EditorPage() {
           return;
         }
       } else if (tagsChanged) {
-        // Only tags changed — update TOC directly
-        const tocRes = await fetch("/api/toc");
-        if (tocRes.ok) {
-          const toc = await tocRes.json();
-          const art = findArticleInToc(toc, filePath);
-          if (art) {
-            art.tags = articleMeta.tags;
-            await fetch("/api/toc", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ toc, message: `Update tags for ${articleMeta.title}` }),
-            });
-          }
+        // Only labels changed — owner-authorized route (works for authors on
+        // their own articles, unlike the tech-writer-only /api/toc).
+        const res = await fetch("/api/article/tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: filePath, tags: articleMeta.tags || [] }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to save labels");
         }
         setOriginalMeta({ ...articleMeta });
         setMetaDirty(false);
@@ -1080,8 +1078,13 @@ export default function EditorPage() {
                   <span style={{ fontSize: 13, color: "var(--fg-muted)" }}>{articleMeta.lastModified || "Never"}</span>
                 </div>
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>Tags (comma-separated)</label>
-                  <input className="input" value={(articleMeta.tags || []).join(", ")} onChange={(e) => { setArticleMeta((p) => p ? { ...p, tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) } : p); setMetaDirty(true); }} />
+                  <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6 }}>Labels</label>
+                  <TagPicker
+                    value={articleMeta.tags || []}
+                    available={conditionTags}
+                    colors={conditionColors}
+                    onChange={(tags) => { setArticleMeta((p) => (p ? { ...p, tags } : p)); setMetaDirty(true); }}
+                  />
                 </div>
               </div>
               {metaDirty && (
