@@ -15,17 +15,47 @@ export const TYPE_META: Record<SearchObjectType, { icon: string; label: string }
   style: { icon: "palette", label: "Style" },
 };
 
+/** Types whose bodyText is long-form prose worth previewing (short-body types
+ *  like variables/glossary already surface their value/definition in subtitle). */
+const PREVIEWABLE = new Set<SearchObjectType>(["article", "snippet"]);
+
+/** A window of body text around the first case-insensitive occurrence of the
+ *  query, split so the match can be emphasized. Null when the query isn't a
+ *  literal substring of the body (e.g. a fuzzy title-only match). */
+function buildExcerpt(
+  body: string,
+  query: string
+): { before: string; match: string; after: string } | null {
+  const q = query.trim();
+  if (q.length < 2) return null;
+  const idx = body.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return null;
+  const start = Math.max(0, idx - 32);
+  const end = Math.min(body.length, idx + q.length + 64);
+  return {
+    before: (start > 0 ? "… " : "") + body.slice(start, idx),
+    match: body.slice(idx, idx + q.length),
+    after: body.slice(idx + q.length, end) + (end < body.length ? " …" : ""),
+  };
+}
+
 interface Props {
   result: SearchResult;
   selected?: boolean;
+  /** The active query — used to render a match preview from the body text. */
+  query?: string;
   /** Fired on single click (selection in the panel; open on the full page). */
   onSelect?: () => void;
   /** Fired on double click — opens the object. */
   onOpen?: () => void;
 }
 
-export default function SearchResultRow({ result, selected, onSelect, onOpen }: Props) {
+export default function SearchResultRow({ result, selected, query, onSelect, onOpen }: Props) {
   const meta = TYPE_META[result.type];
+  const excerpt =
+    query && result.bodyText && PREVIEWABLE.has(result.type)
+      ? buildExcerpt(result.bodyText, query)
+      : null;
   return (
     <div
       role="option"
@@ -72,6 +102,26 @@ export default function SearchResultRow({ result, selected, onSelect, onOpen }: 
             }}
           >
             {result.subtitle}
+          </div>
+        )}
+        {excerpt && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--fg-muted)",
+              marginTop: 3,
+              lineHeight: 1.4,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {excerpt.before}
+            <mark style={{ background: "var(--accent-light)", color: "var(--fg)", fontWeight: 500, padding: "0 1px", borderRadius: 2 }}>
+              {excerpt.match}
+            </mark>
+            {excerpt.after}
           </div>
         )}
       </div>
