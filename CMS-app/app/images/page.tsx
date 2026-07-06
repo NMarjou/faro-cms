@@ -9,6 +9,7 @@ import { useCurrentProject } from "@/components/CurrentProjectProvider";
 import { canManageImages, canDeleteImage } from "@/lib/permissions";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 import { useHighlightParams } from "@/components/searchHighlight";
+import { revealInExplorer } from "@/components/revealInExplorer";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
   ssr: false,
@@ -417,6 +418,12 @@ export default function ImagesPage() {
                   ? `Owner: ${viewing.owner}${viewing.uploadedAt ? ` · ${viewing.uploadedAt}` : ""}`
                   : "Owner: unknown"}
               </span>
+              <button
+                className="btn btn-sm"
+                onClick={() => { const f = viewing.file; setViewing(null); revealInExplorer({ type: "image", file: f }); }}
+              >
+                Locate in explorer
+              </button>
               <button className="btn btn-sm" onClick={() => { copyPath(viewing); }}>
                 {copied === viewing.file ? "Copied!" : "Copy Path"}
               </button>

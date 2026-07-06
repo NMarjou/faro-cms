@@ -10,6 +10,7 @@ import Icon from "./Icon";
 import { useCurrentUser } from "./CurrentUserProvider";
 import ProjectSwitcher from "./ProjectSwitcher";
 import { isTechWriter, canManageImages } from "@/lib/permissions";
+import { REVEAL_EVENT, type RevealTarget } from "./revealInExplorer";
 
 type CreatingAt =
   | null
@@ -17,6 +18,48 @@ type CreatingAt =
   | { type: "section"; categorySlug: string }
   | { type: "snippet-folder"; parent: string }
   | { type: "image-folder"; parent: string };
+
+/** Section-chain expansion keys (root→leaf) for the article with this file,
+ *  or null if not under this section list. Mirrors renderSection's key scheme. */
+function findSectionChain(
+  sections: TocSection[],
+  file: string,
+  catSlug: string,
+  acc: string[]
+): string[] | null {
+  for (const s of sections) {
+    const chain = [...acc, `sec:${catSlug}/${s.slug}`];
+    if (s.articles.some((a) => a.file === file)) return chain;
+    if (s.subsections) {
+      const found = findSectionChain(s.subsections, file, catSlug, chain);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** All expansion keys that must be open to reveal a target leaf in the tree. */
+function ancestorKeys(target: RevealTarget, toc: Toc | null): string[] {
+  if (target.type === "article") {
+    for (const cat of toc?.categories ?? []) {
+      const chain = findSectionChain(cat.sections, target.file, cat.slug, []);
+      if (chain) return ["nav:articles", `cat:${cat.slug}`, ...chain];
+    }
+    return ["nav:articles"]; // top-level (uncategorized) article
+  }
+  // Snippets/images: open the nav section + each ancestor folder.
+  const root = target.type === "snippet" ? "snippets" : "images";
+  const prefix = target.type === "snippet" ? "snip-folder" : "img-folder";
+  const parts = target.file.replace(new RegExp(`^${root}/`), "").split("/");
+  parts.pop(); // drop the filename
+  const keys = [`nav:${root}`];
+  let acc = "";
+  for (const p of parts) {
+    acc = acc ? `${acc}/${p}` : p;
+    keys.push(`${prefix}:${acc}`);
+  }
+  return keys;
+}
 
 export default function SidebarTree() {
   const pathname = usePathname();
@@ -126,6 +169,38 @@ export default function SidebarTree() {
       return next;
     });
   };
+
+  // Reveal-in-explorer: an object surface (editor, image viewer) fires
+  // REVEAL_EVENT; expand the sidebar to the object's location, scroll its leaf
+  // into view and flash it. tocRef keeps the (mounted-once) listener reading the
+  // latest TOC without re-subscribing.
+  const tocRef = useRef<Toc | null>(null);
+  tocRef.current = toc;
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const target = (e as CustomEvent).detail as RevealTarget;
+      if (!target?.type || !target?.file) return;
+      setCollapsed(false);
+      setExpanded((prev) => new Set([...prev, ...ancestorKeys(target, tocRef.current)]));
+      const treeId = `${target.type}:${target.file}`;
+      let tries = 0;
+      const attempt = () => {
+        const sel = `.sidebar-tree [data-tree-id="${treeId.replace(/["\\]/g, "\\$&")}"]`;
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el) {
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+          el.classList.add("search-highlight-flash");
+          window.setTimeout(() => el.classList.remove("search-highlight-flash"), 2200);
+        } else if (tries++ < 10) {
+          // The tree data (or a just-expanded branch) may still be rendering.
+          window.setTimeout(attempt, 120);
+        }
+      };
+      window.setTimeout(attempt, 60);
+    };
+    window.addEventListener(REVEAL_EVENT, handler);
+    return () => window.removeEventListener(REVEAL_EVENT, handler);
+  }, []);
 
   // Auto-focus the inline input when creating a folder
   useEffect(() => {
@@ -268,6 +343,7 @@ export default function SidebarTree() {
     return (
       <button
         key={article.slug}
+        data-tree-id={`article:${article.file}`}
         onClick={() => router.push(`/editor/${encodeURIComponent(article.file)}`)}
         draggable
         onDragStart={(e) => handleDragStart(e, { type: "article", name: article.title, file: article.file })}
@@ -362,6 +438,7 @@ export default function SidebarTree() {
     return (
       <button
         key={snippet.file}
+        data-tree-id={`snippet:${snippet.file}`}
         onClick={() => router.push(`/editor/${encodeURIComponent(snippet.file)}`)}
         draggable
         onDragStart={(e) => handleDragStart(e, { type: "snippet", name: snippet.name, file: snippet.file })}
@@ -419,6 +496,7 @@ export default function SidebarTree() {
   const renderImageLeaf = (image: { name: string; file: string }) => (
     <button
       key={image.file}
+      data-tree-id={`image:${image.file}`}
       onDoubleClick={() => setViewingImage(image)}
       draggable
       onDragStart={(e) => handleDragStart(e, { type: "image", name: image.name, file: image.file })}
