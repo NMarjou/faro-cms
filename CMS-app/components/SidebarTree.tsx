@@ -501,16 +501,6 @@ export default function SidebarTree() {
             </>
           )}
           {navItem("/glossary", "book-open", "Glossary", pathname === "/glossary")}
-          <button
-            key="search"
-            type="button"
-            onClick={() => window.dispatchEvent(new Event("cms-open-search"))}
-            title="Search (⌘K)"
-            className="sidebar-collapsed-link"
-            style={{ background: "none", border: "none", cursor: "pointer" }}
-          >
-            <Icon name="magnifying-glass" size={16} />
-          </button>
           {techWriter && (
             <>
               {navItem("/publish", "cloud-arrow-up", "Publish", pathname === "/publish")}
@@ -576,20 +566,6 @@ export default function SidebarTree() {
 
       {/* Project switcher — scopes all content to the selected project. */}
       <ProjectSwitcher />
-
-      {/* Global search launcher — opens the non-modal search panel (also ⌘K). */}
-      <div style={{ padding: "0 12px 8px" }}>
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new Event("cms-open-search"))}
-          className="sidebar-search-btn"
-          title="Search everything (⌘K)"
-        >
-          <Icon name="magnifying-glass" size={14} style={{ color: "var(--fg-muted)" }} />
-          <span>Search</span>
-          <kbd className="sidebar-search-kbd">⌘K</kbd>
-        </button>
-      </div>
 
       <div className="sidebar-tree">
         {/* Dashboard */}

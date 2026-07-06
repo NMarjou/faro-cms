@@ -575,39 +575,6 @@ button {
   font-weight: 500;
 }
 
-/* Sidebar search launcher — reads as a button (opens the search panel), not an
-   editable field. */
-.sidebar-search-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-
-.sidebar-search-btn:hover {
-  background: var(--bg-secondary);
-  border-color: var(--fg-muted);
-}
-
-.sidebar-search-btn .sidebar-search-kbd {
-  margin-left: auto;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--fg-muted);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-
 button.tree-nav-link {
   border: none;
   background: none;
