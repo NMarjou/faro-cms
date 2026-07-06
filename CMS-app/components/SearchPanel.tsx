@@ -170,6 +170,7 @@ export default function SearchPanel() {
           <SearchResultRow
             key={r.id}
             result={r}
+            query={query}
             selected={i === selected}
             onSelect={() => setSelected(i)}
             onOpen={() => openResult(r)}
