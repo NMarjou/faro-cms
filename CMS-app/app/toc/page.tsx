@@ -43,6 +43,65 @@ function mapSections(
   });
 }
 
+/** A place an article can live: a section (category + slug chain) or the
+ *  standalone/uncategorized bucket. */
+type ArticleTarget = { catSlug: string; chain: string[] } | "uncategorized";
+
+/** Encode a target for a <select> value / current-location comparison. */
+const targetKey = (t: ArticleTarget): string =>
+  t === "uncategorized" ? "uncategorized" : JSON.stringify({ catSlug: t.catSlug, chain: t.chain });
+
+/** Pull an article out of wherever it lives (first slug match), returning the
+ *  trimmed TOC and the removed entry. */
+function extractArticle(toc: Toc, slug: string): { toc: Toc; entry: TocArticle | null } {
+  let entry: TocArticle | null = null;
+  const pull = (arts: TocArticle[]) =>
+    arts.filter((a) => {
+      if (!entry && a.slug === slug) { entry = a; return false; }
+      return true;
+    });
+  const walk = (secs: TocSection[]): TocSection[] =>
+    secs.map((s) => ({
+      ...s,
+      articles: pull(s.articles),
+      ...(s.subsections ? { subsections: walk(s.subsections) } : {}),
+    }));
+  const categories = toc.categories.map((c) => ({ ...c, sections: walk(c.sections) }));
+  const articles = toc.articles ? pull(toc.articles) : toc.articles;
+  return { toc: { ...toc, categories, articles }, entry };
+}
+
+/** Append an article entry into a target location. */
+function insertArticle(toc: Toc, target: ArticleTarget, entry: TocArticle): Toc {
+  if (target === "uncategorized") {
+    return { ...toc, articles: [...(toc.articles ?? []), entry] };
+  }
+  return {
+    ...toc,
+    categories: toc.categories.map((c) =>
+      c.slug === target.catSlug
+        ? { ...c, sections: mapSections(c.sections, target.chain, (s) => ({ ...s, articles: [...s.articles, entry] })) }
+        : c
+    ),
+  };
+}
+
+/** Flatten every section into a pick-list of move targets, breadcrumb-labeled. */
+function sectionTargets(toc: Toc): { catSlug: string; chain: string[]; label: string }[] {
+  const out: { catSlug: string; chain: string[]; label: string }[] = [];
+  for (const cat of toc.categories) {
+    const walk = (secs: TocSection[], slugTrail: string[], nameTrail: string[]) => {
+      for (const s of secs) {
+        const chain = [...slugTrail, s.slug];
+        out.push({ catSlug: cat.slug, chain, label: [cat.name, ...nameTrail, s.name].join(" › ") });
+        if (s.subsections) walk(s.subsections, chain, [...nameTrail, s.name]);
+      }
+    };
+    walk(cat.sections, [], []);
+  }
+  return out;
+}
+
 export default function TocPage() {
   const { role, loaded } = useCurrentUser();
   const [toc, setToc] = useState<Toc | null>(null);
@@ -122,8 +181,6 @@ export default function TocPage() {
   const removeSection = (catSlug: string, chain: string[]) => {
     if (confirm("Delete this section and unlink its articles? (Files are not deleted)")) updateSection(catSlug, chain, () => null);
   };
-  /** Reorder the sections that live directly under `parentChain` ([] = the
-   *  category's top-level sections; otherwise the subsections of that section). */
   const reorderSections = (catSlug: string, parentChain: string[], newItems: { id: string }[]) => {
     const ids = newItems.map((i) => i.id);
     if (parentChain.length === 0) {
@@ -136,15 +193,81 @@ export default function TocPage() {
   // ── Article ops ──
   const reorderArticles = (catSlug: string, chain: string[], newItems: { id: string }[]) =>
     updateSection(catSlug, chain, (s) => ({ ...s, articles: reorderBySlug(s.articles, newItems.map((i) => i.id)) }));
-  const removeArticle = (catSlug: string, chain: string[], articleSlug: string) => {
-    if (confirm("Remove this article from the TOC? (File is not deleted)")) {
-      updateSection(catSlug, chain, (s) => ({ ...s, articles: s.articles.filter((a) => a.slug !== articleSlug) }));
+  const reorderUncategorized = (newItems: { id: string }[]) => {
+    if (toc) saveToc({ ...toc, articles: reorderBySlug(toc.articles ?? [], newItems.map((i) => i.id)) });
+  };
+  const removeArticleFrom = (loc: ArticleTarget, articleSlug: string) => {
+    if (!toc || !confirm("Remove this article from the TOC? (File is not deleted)")) return;
+    if (loc === "uncategorized") {
+      saveToc({ ...toc, articles: (toc.articles ?? []).filter((a) => a.slug !== articleSlug) });
+    } else {
+      updateSection(loc.catSlug, loc.chain, (s) => ({ ...s, articles: s.articles.filter((a) => a.slug !== articleSlug) }));
     }
+  };
+  /** Relocate an article to a different section (or to uncategorized). */
+  const moveArticle = (articleSlug: string, target: ArticleTarget) => {
+    if (!toc) return;
+    const { toc: without, entry } = extractArticle(toc, articleSlug);
+    if (entry) saveToc(insertArticle(without, target, entry));
   };
 
   if (loaded && role === "contributor") {
     return <TechWriterBlocked title="Table of Contents" />;
   }
+
+  const targets = toc ? sectionTargets(toc) : [];
+
+  // ── One article row: drag handle, title, path, Move-to picker, remove ──
+  const renderArticleRow = (
+    art: TocArticle & { id: string },
+    ap: { ref: React.Ref<HTMLElement>; listeners: Record<string, unknown> | undefined },
+    currentKey: string
+  ) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 14 }}>
+      <DragHandle ref={ap.ref} {...ap.listeners} />
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{art.title}</span>
+      <span style={{ fontSize: 12, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>{art.file}</span>
+      <select
+        className="input"
+        value=""
+        title="Move to another section"
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v) moveArticle(art.slug, v === "uncategorized" ? "uncategorized" : (JSON.parse(v) as ArticleTarget));
+        }}
+        style={{ fontSize: 12, padding: "2px 6px", width: "auto", cursor: "pointer" }}
+      >
+        <option value="">Move to…</option>
+        {targets
+          .filter((t) => targetKey({ catSlug: t.catSlug, chain: t.chain }) !== currentKey)
+          .map((t) => (
+            <option key={t.catSlug + "/" + t.chain.join("/")} value={JSON.stringify({ catSlug: t.catSlug, chain: t.chain })}>
+              {t.label}
+            </option>
+          ))}
+        {currentKey !== "uncategorized" && <option value="uncategorized">Uncategorized</option>}
+      </select>
+      <button
+        onClick={() => removeArticleFrom(currentKey === "uncategorized" ? "uncategorized" : (JSON.parse(currentKey) as ArticleTarget), art.slug)}
+        style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
+        title="Remove from TOC"
+      >
+        x
+      </button>
+    </div>
+  );
+
+  const renderArticleList = (
+    articles: TocArticle[],
+    currentKey: string,
+    onReorder: (items: { id: string }[]) => void
+  ) => (
+    <SortableList
+      items={articles.map((a) => ({ ...a, id: a.slug }))}
+      onReorder={onReorder}
+      renderItem={(art: TocArticle & { id: string }, ap) => renderArticleRow(art, ap, currentKey)}
+    />
+  );
 
   // ── Recursive section renderer ──
   const renderSections = (catSlug: string, sections: TocSection[], parentChain: string[]) => (
@@ -153,6 +276,7 @@ export default function TocPage() {
       onReorder={(items) => reorderSections(catSlug, parentChain, items)}
       renderItem={(sec, handleProps) => {
         const chain = [...parentChain, sec.slug];
+        const currentKey = targetKey({ catSlug, chain });
         return (
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -167,24 +291,7 @@ export default function TocPage() {
             </div>
             {sec.articles.length > 0 && (
               <div style={{ marginTop: 6, marginLeft: 22 }}>
-                <SortableList
-                  items={sec.articles.map((a) => ({ ...a, id: a.slug }))}
-                  onReorder={(items) => reorderArticles(catSlug, chain, items)}
-                  renderItem={(art: TocArticle & { id: string }, ap) => (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 14 }}>
-                      <DragHandle ref={ap.ref} {...ap.listeners} />
-                      <span style={{ flex: 1 }}>{art.title}</span>
-                      <span style={{ fontSize: 12, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>{art.file}</span>
-                      <button
-                        onClick={() => removeArticle(catSlug, chain, art.slug)}
-                        style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
-                        title="Remove from TOC"
-                      >
-                        x
-                      </button>
-                    </div>
-                  )}
-                />
+                {renderArticleList(sec.articles, currentKey, (items) => reorderArticles(catSlug, chain, items))}
               </div>
             )}
             {sec.subsections && sec.subsections.length > 0 && (
@@ -207,27 +314,41 @@ export default function TocPage() {
       <div className="main-body">
         {loading && <p>Loading...</p>}
         {toc && (
-          <SortableList
-            items={toc.categories.map((c) => ({ ...c, id: c.slug }))}
-            onReorder={reorderCategories}
-            renderItem={(cat, handleProps) => (
-              <div className="card" style={{ marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <DragHandle ref={handleProps.ref} {...handleProps.listeners} />
-                    <h2 style={{ fontSize: 18 }}>{cat.name}</h2>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                    <button onClick={() => renameCategory(cat)} className="btn btn-sm">Rename</button>
-                    <button onClick={() => addSection(cat.slug)} className="btn btn-sm">Add Section</button>
-                    <button onClick={() => removeCategory(cat.slug)} className="btn btn-sm btn-danger">Delete</button>
-                  </div>
+          <>
+            {toc.articles && toc.articles.length > 0 && (
+              <div className="card" style={{ marginBottom: 16, borderStyle: "dashed" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <h2 style={{ fontSize: 18 }}>Uncategorized</h2>
+                  <span className="badge">{toc.articles.length}</span>
                 </div>
-                <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 8 }}>{cat.description || "No description"}</p>
-                {cat.sections.length > 0 && renderSections(cat.slug, cat.sections, [])}
+                <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 8 }}>
+                  Newly created articles land here. Use “Move to…” to file them under a section.
+                </p>
+                {renderArticleList(toc.articles, "uncategorized", reorderUncategorized)}
               </div>
             )}
-          />
+            <SortableList
+              items={toc.categories.map((c) => ({ ...c, id: c.slug }))}
+              onReorder={reorderCategories}
+              renderItem={(cat, handleProps) => (
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <DragHandle ref={handleProps.ref} {...handleProps.listeners} />
+                      <h2 style={{ fontSize: 18 }}>{cat.name}</h2>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <button onClick={() => renameCategory(cat)} className="btn btn-sm">Rename</button>
+                      <button onClick={() => addSection(cat.slug)} className="btn btn-sm">Add Section</button>
+                      <button onClick={() => removeCategory(cat.slug)} className="btn btn-sm btn-danger">Delete</button>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 8 }}>{cat.description || "No description"}</p>
+                  {cat.sections.length > 0 && renderSections(cat.slug, cat.sections, [])}
+                </div>
+              )}
+            />
+          </>
         )}
       </div>
     </>
