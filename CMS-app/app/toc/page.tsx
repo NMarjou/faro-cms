@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import dynamic from "next/dynamic";
 import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
+import Icon from "@/components/Icon";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
@@ -81,6 +82,25 @@ function insertArticle(toc: Toc, target: ArticleTarget, entry: TocArticle): Toc 
     categories: toc.categories.map((c) =>
       c.slug === target.catSlug
         ? { ...c, sections: mapSections(c.sections, target.chain, (s) => ({ ...s, articles: [...s.articles, entry] })) }
+        : c
+    ),
+  };
+}
+
+/** Insert an article into a target location, before `beforeSlug` if given
+ *  (else appended). Used by drag-and-drop to drop at a specific position. */
+function insertArticleAt(toc: Toc, target: ArticleTarget, entry: TocArticle, beforeSlug?: string): Toc {
+  const place = (arts: TocArticle[]) => {
+    if (!beforeSlug) return [...arts, entry];
+    const i = arts.findIndex((a) => a.slug === beforeSlug);
+    return i === -1 ? [...arts, entry] : [...arts.slice(0, i), entry, ...arts.slice(i)];
+  };
+  if (target === "uncategorized") return { ...toc, articles: place(toc.articles ?? []) };
+  return {
+    ...toc,
+    categories: toc.categories.map((c) =>
+      c.slug === target.catSlug
+        ? { ...c, sections: mapSections(c.sections, target.chain, (s) => ({ ...s, articles: place(s.articles) })) }
         : c
     ),
   };
@@ -191,11 +211,6 @@ export default function TocPage() {
   };
 
   // ── Article ops ──
-  const reorderArticles = (catSlug: string, chain: string[], newItems: { id: string }[]) =>
-    updateSection(catSlug, chain, (s) => ({ ...s, articles: reorderBySlug(s.articles, newItems.map((i) => i.id)) }));
-  const reorderUncategorized = (newItems: { id: string }[]) => {
-    if (toc) saveToc({ ...toc, articles: reorderBySlug(toc.articles ?? [], newItems.map((i) => i.id)) });
-  };
   const removeArticleFrom = (loc: ArticleTarget, articleSlug: string) => {
     if (!toc || !confirm("Remove this article from the TOC? (File is not deleted)")) return;
     if (loc === "uncategorized") {
@@ -211,63 +226,104 @@ export default function TocPage() {
     if (entry) saveToc(insertArticle(without, target, entry));
   };
 
+  // ── Drag-and-drop (native HTML5) for moving/reordering articles across
+  // sections. dnd-kit can't span the article lists (they're nested inside the
+  // section/category sortables, and dnd-kit binds to the nearest context), so
+  // articles use HTML5 DnD: rows are draggable, each container is a drop zone.
+  const [dragSlug, setDragSlug] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  const onArticleDragStart = (e: React.DragEvent, slug: string) => {
+    e.dataTransfer.setData("text/x-toc-article", slug);
+    e.dataTransfer.effectAllowed = "move";
+    setDragSlug(slug);
+  };
+  const endDrag = () => { setDragSlug(null); setDragOverKey(null); };
+  /** Drop `slug` into `target`, before `beforeSlug` (a row) or appended. */
+  const dropArticle = (e: React.DragEvent, target: ArticleTarget, beforeSlug?: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const slug = e.dataTransfer.getData("text/x-toc-article");
+    endDrag();
+    if (!toc || !slug || slug === beforeSlug) return;
+    const { toc: without, entry } = extractArticle(toc, slug);
+    if (entry) saveToc(insertArticleAt(without, target, entry, beforeSlug));
+  };
+
   if (loaded && role === "contributor") {
     return <TechWriterBlocked title="Table of Contents" />;
   }
 
   const targets = toc ? sectionTargets(toc) : [];
 
-  // ── One article row: drag handle, title, path, Move-to picker, remove ──
-  const renderArticleRow = (
-    art: TocArticle & { id: string },
-    ap: { ref: React.Ref<HTMLElement>; listeners: Record<string, unknown> | undefined },
-    currentKey: string
-  ) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 14 }}>
-      <DragHandle ref={ap.ref} {...ap.listeners} />
-      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{art.title}</span>
-      <span style={{ fontSize: 12, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>{art.file}</span>
-      <select
-        className="input"
-        value=""
-        title="Move to another section"
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v) moveArticle(art.slug, v === "uncategorized" ? "uncategorized" : (JSON.parse(v) as ArticleTarget));
-        }}
-        style={{ fontSize: 12, padding: "2px 6px", width: "auto", cursor: "pointer" }}
+  // ── One draggable article row: grab cue, title, path, Move-to picker, remove.
+  // Dropping another row here inserts before it (reorder / cross-section place). ──
+  const renderArticleRow = (art: TocArticle, target: ArticleTarget) => {
+    const currentKey = targetKey(target);
+    return (
+      <div
+        key={art.slug}
+        draggable
+        onDragStart={(e) => onArticleDragStart(e, art.slug)}
+        onDragEnd={endDrag}
+        onDragOver={(e) => { if (dragSlug && dragSlug !== art.slug) { e.preventDefault(); e.stopPropagation(); if (dragOverKey !== currentKey) setDragOverKey(currentKey); } }}
+        onDrop={(e) => dropArticle(e, target, art.slug)}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 14, cursor: "grab", opacity: dragSlug === art.slug ? 0.4 : 1 }}
       >
-        <option value="">Move to…</option>
-        {targets
-          .filter((t) => targetKey({ catSlug: t.catSlug, chain: t.chain }) !== currentKey)
-          .map((t) => (
-            <option key={t.catSlug + "/" + t.chain.join("/")} value={JSON.stringify({ catSlug: t.catSlug, chain: t.chain })}>
-              {t.label}
-            </option>
-          ))}
-        {currentKey !== "uncategorized" && <option value="uncategorized">Uncategorized</option>}
-      </select>
-      <button
-        onClick={() => removeArticleFrom(currentKey === "uncategorized" ? "uncategorized" : (JSON.parse(currentKey) as ArticleTarget), art.slug)}
-        style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
-        title="Remove from TOC"
-      >
-        x
-      </button>
-    </div>
-  );
+        <span className="drag-handle" style={{ color: "var(--fg-muted)" }}><Icon name="dots-six-vertical" size={14} /></span>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{art.title}</span>
+        <span style={{ fontSize: 12, color: "var(--fg-muted)", fontFamily: "var(--font-mono)" }}>{art.file}</span>
+        <select
+          className="input"
+          value=""
+          title="Move to another section"
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) moveArticle(art.slug, v === "uncategorized" ? "uncategorized" : (JSON.parse(v) as ArticleTarget));
+          }}
+          style={{ fontSize: 12, padding: "2px 6px", width: "auto", cursor: "pointer" }}
+        >
+          <option value="">Move to…</option>
+          {targets
+            .filter((t) => targetKey({ catSlug: t.catSlug, chain: t.chain }) !== currentKey)
+            .map((t) => (
+              <option key={t.catSlug + "/" + t.chain.join("/")} value={JSON.stringify({ catSlug: t.catSlug, chain: t.chain })}>
+                {t.label}
+              </option>
+            ))}
+          {currentKey !== "uncategorized" && <option value="uncategorized">Uncategorized</option>}
+        </select>
+        <button
+          onClick={() => removeArticleFrom(target, art.slug)}
+          style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
+          title="Remove from TOC"
+        >
+          x
+        </button>
+      </div>
+    );
+  };
 
-  const renderArticleList = (
-    articles: TocArticle[],
-    currentKey: string,
-    onReorder: (items: { id: string }[]) => void
-  ) => (
-    <SortableList
-      items={articles.map((a) => ({ ...a, id: a.slug }))}
-      onReorder={onReorder}
-      renderItem={(art: TocArticle & { id: string }, ap) => renderArticleRow(art, ap, currentKey)}
-    />
-  );
+  /** A section/uncategorized article list that is also a drop zone. Renders
+   *  nothing when empty and nothing is being dragged, so the tree stays clean;
+   *  during a drag, empty zones appear so you can drop into them. */
+  const renderArticleContainer = (articles: TocArticle[], target: ArticleTarget, marginLeft: number) => {
+    if (articles.length === 0 && !dragSlug) return null;
+    const key = targetKey(target);
+    const isOver = dragOverKey === key;
+    return (
+      <div
+        onDragOver={(e) => { if (dragSlug) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; if (dragOverKey !== key) setDragOverKey(key); } }}
+        onDrop={(e) => dropArticle(e, target)}
+        style={{ marginTop: 6, marginLeft, minHeight: dragSlug ? 26 : undefined, padding: "2px 4px", borderRadius: 6, background: isOver ? "var(--accent-light)" : undefined, outline: isOver ? "1px dashed var(--accent)" : undefined }}
+      >
+        {articles.map((art) => renderArticleRow(art, target))}
+        {articles.length === 0 && dragSlug && (
+          <div style={{ fontSize: 12, color: "var(--fg-muted)", padding: "4px 8px" }}>Drop here</div>
+        )}
+      </div>
+    );
+  };
 
   // ── Recursive section renderer ──
   const renderSections = (catSlug: string, sections: TocSection[], parentChain: string[]) => (
@@ -276,7 +332,6 @@ export default function TocPage() {
       onReorder={(items) => reorderSections(catSlug, parentChain, items)}
       renderItem={(sec, handleProps) => {
         const chain = [...parentChain, sec.slug];
-        const currentKey = targetKey({ catSlug, chain });
         return (
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -289,11 +344,7 @@ export default function TocPage() {
               <button onClick={() => addSubsection(catSlug, chain)} className="btn btn-sm">+ Subsection</button>
               <button onClick={() => removeSection(catSlug, chain)} className="btn btn-sm btn-danger">Remove</button>
             </div>
-            {sec.articles.length > 0 && (
-              <div style={{ marginTop: 6, marginLeft: 22 }}>
-                {renderArticleList(sec.articles, currentKey, (items) => reorderArticles(catSlug, chain, items))}
-              </div>
-            )}
+            {renderArticleContainer(sec.articles, { catSlug, chain }, 22)}
             {sec.subsections && sec.subsections.length > 0 && (
               <div style={{ marginLeft: 22 }}>{renderSections(catSlug, sec.subsections, chain)}</div>
             )}
@@ -324,7 +375,7 @@ export default function TocPage() {
                 <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 8 }}>
                   Newly created articles land here. Use “Move to…” to file them under a section.
                 </p>
-                {renderArticleList(toc.articles, "uncategorized", reorderUncategorized)}
+                {renderArticleContainer(toc.articles, "uncategorized", 0)}
               </div>
             )}
             <SortableList
