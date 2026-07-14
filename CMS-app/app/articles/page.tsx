@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
-import type { Toc, TocCategory, TocArticle } from "@/lib/types";
+import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
+import { flattenTocArticles, articlesInSections } from "@/lib/toc-walk";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { canCreateArticles } from "@/lib/permissions";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
@@ -59,14 +60,41 @@ export default function ArticlesPage() {
     });
   };
 
-  const countArticles = (toc: Toc): number => {
-    let count = 0;
-    for (const cat of toc.categories) {
-      for (const sec of cat.sections) {
-        count += sec.articles.length;
-      }
-    }
-    return count;
+  // Counts articles in subsections too (the hand-rolled version didn't, so the
+  // header under-reported). Standalone articles are reported separately.
+  const countArticles = (toc: Toc): number =>
+    flattenTocArticles(toc, { includeUncategorized: false }).length;
+
+  /** A section and, recursively, its subsections — the TOC nests to any depth,
+   *  so the browser must too or those articles are simply invisible here. */
+  const renderSection = (section: TocSection, depth = 0) => {
+    const total = articlesInSections([section]).length; // includes nested
+    const isOpen = expandedSections.has(section.slug);
+    return (
+      <div key={section.slug} style={{ marginBottom: 4, marginLeft: depth ? 16 : 0 }}>
+        <button
+          onClick={() => toggleSection(section.slug)}
+          style={{
+            display: "flex", alignItems: "center", gap: 8, width: "100%",
+            padding: "8px 12px", background: "none", border: "none",
+            fontSize: depth ? 13 : 14, fontWeight: 500, cursor: "pointer",
+            textAlign: "left", color: "var(--fg)",
+          }}
+        >
+          <span style={{ fontSize: 10, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+            ▶
+          </span>
+          {section.name}
+          <span className="badge" style={{ marginLeft: "auto" }}>{total}</span>
+        </button>
+        {isOpen && (
+          <div style={{ paddingLeft: 24 }}>
+            {section.articles.map(renderArticleRow)}
+            {section.subsections?.map((sub) => renderSection(sub, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   // One row in the article list — shared by categorized sections and the
@@ -219,51 +247,7 @@ export default function ArticlesPage() {
                   )}
                   {expandedCategories.has(category.slug) && (
                     <div style={{ paddingLeft: 20, marginTop: 4 }}>
-                      {category.sections.map((section) => (
-                        <div key={section.slug} style={{ marginBottom: 4 }}>
-                          <button
-                            onClick={() => toggleSection(section.slug)}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              width: "100%",
-                              padding: "8px 12px",
-                              background: "none",
-                              border: "none",
-                              fontSize: 14,
-                              fontWeight: 500,
-                              cursor: "pointer",
-                              textAlign: "left",
-                              color: "var(--fg)",
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 10,
-                                transform: expandedSections.has(section.slug)
-                                  ? "rotate(90deg)"
-                                  : "none",
-                                transition: "transform 0.15s",
-                              }}
-                            >
-                              ▶
-                            </span>
-                            {section.name}
-                            <span
-                              className="badge"
-                              style={{ marginLeft: "auto" }}
-                            >
-                              {section.articles.length}
-                            </span>
-                          </button>
-                          {expandedSections.has(section.slug) && (
-                            <div style={{ paddingLeft: 24 }}>
-                              {section.articles.map(renderArticleRow)}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                      {category.sections.map((section) => renderSection(section))}
                     </div>
                   )}
                 </div>

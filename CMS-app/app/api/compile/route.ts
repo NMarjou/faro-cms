@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { getFile } from "@/lib/storage";
-import { getToc, getAllArticlesFromToc } from "@/lib/content";
+import { getToc } from "@/lib/content";
+import { flattenTocArticles } from "@/lib/toc-walk";
 import { compileArticle, createSnippetCache } from "@/lib/compile";
 import type { TocCategory, TocSection, TocArticle } from "@/lib/types";
 
@@ -17,6 +18,9 @@ interface CompiledSection {
   name: string;
   slug: string;
   articles: CompiledArticle[];
+  /** Nested sections. The TOC allows arbitrary depth; compiled output must
+   *  mirror it, or articles filed into a subsection never ship. */
+  subsections?: CompiledSection[];
 }
 
 interface CompiledCategory {
@@ -52,32 +56,45 @@ export async function POST(request: NextRequest) {
       let totalArticles = 0;
       let totalErrors = 0;
 
-      for (const cat of selected) {
-        const compiledSections: CompiledSection[] = [];
-
-        for (const sec of cat.sections) {
-          const compiledArticles: CompiledArticle[] = [];
-
-          for (const art of sec.articles) {
-            try {
-              const file = await getFile(`content/${art.file}`, ref);
-              const { html, snippets } = await compileArticle(file.content, ref, cache, tags);
-              compiledArticles.push({ title: art.title, slug: art.slug, file: art.file, html, snippets });
-              totalArticles++;
-            } catch {
-              compiledArticles.push({ title: art.title, slug: art.slug, file: art.file, html: "", snippets: [] });
-              totalErrors++;
-            }
+      const compileArticles = async (arts: TocArticle[]): Promise<CompiledArticle[]> => {
+        const out: CompiledArticle[] = [];
+        for (const art of arts) {
+          try {
+            const file = await getFile(`content/${art.file}`, ref);
+            const { html, snippets } = await compileArticle(file.content, ref, cache, tags);
+            out.push({ title: art.title, slug: art.slug, file: art.file, html, snippets });
+            totalArticles++;
+          } catch {
+            out.push({ title: art.title, slug: art.slug, file: art.file, html: "", snippets: [] });
+            totalErrors++;
           }
-
-          compiledSections.push({ name: sec.name, slug: sec.slug, articles: compiledArticles });
         }
+        return out;
+      };
 
+      // Recurse into subsections — this used to stop at the top level, so any
+      // article filed into a subsection was silently missing from the output.
+      const compileSections = async (secs: TocSection[]): Promise<CompiledSection[]> => {
+        const out: CompiledSection[] = [];
+        for (const sec of secs) {
+          out.push({
+            name: sec.name,
+            slug: sec.slug,
+            articles: await compileArticles(sec.articles ?? []),
+            ...(sec.subsections?.length
+              ? { subsections: await compileSections(sec.subsections) }
+              : {}),
+          });
+        }
+        return out;
+      };
+
+      for (const cat of selected) {
         compiledCategories.push({
           name: cat.name,
           slug: cat.slug,
           description: cat.description,
-          sections: compiledSections,
+          sections: await compileSections(cat.sections ?? []),
         });
       }
 
@@ -90,7 +107,9 @@ export async function POST(request: NextRequest) {
     // ── Batch compile all ──
     if (all) {
       const toc = await getToc(ref);
-      const articles = getAllArticlesFromToc(toc);
+      // Includes subsections at any depth AND the uncategorised bucket, so
+      // this agrees with what publish considers publishable.
+      const articles = flattenTocArticles(toc);
       const results: { path: string; html: string; snippets: string[] }[] = [];
 
       for (const article of articles) {

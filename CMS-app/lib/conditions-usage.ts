@@ -1,6 +1,7 @@
 import { getToc, getArticle } from "./content";
 import { parseTags } from "./compile";
-import type { Toc, TocArticle } from "./types";
+import { flattenTocArticles } from "./toc-walk";
+import type { Toc } from "./types";
 
 /**
  * "Where used" for condition tags — the safety net for deleting one.
@@ -34,19 +35,6 @@ export type ConditionUsage = {
 /** Every conditional opening tag in a body (block divs and inline spans). */
 const CONDITIONAL_TAG = /<(?:div|span)\b[^>]*data-(?:node-type|mark-type)="conditional"[^>]*>/gi;
 
-function collectArticles(toc: Toc): TocArticle[] {
-  const out: TocArticle[] = [];
-  const walk = (secs: Toc["categories"][number]["sections"]) => {
-    for (const s of secs) {
-      out.push(...s.articles);
-      if (s.subsections) walk(s.subsections);
-    }
-  };
-  for (const c of toc.categories) walk(c.sections);
-  out.push(...(toc.articles ?? []));
-  return out;
-}
-
 /** Usage of every condition tag across the current project, keyed by tag. */
 export async function buildConditionUsage(): Promise<Record<string, ConditionUsage>> {
   const usage: Record<string, ConditionUsage> = {};
@@ -60,7 +48,7 @@ export async function buildConditionUsage(): Promise<Record<string, ConditionUsa
     return usage;
   }
 
-  for (const article of collectArticles(toc)) {
+  for (const article of flattenTocArticles(toc)) {
     const ref: ArticleRef = { file: article.file, title: article.title };
 
     for (const tag of article.tags ?? []) bucket(tag).labels.push(ref);

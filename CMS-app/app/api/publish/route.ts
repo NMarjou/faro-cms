@@ -13,6 +13,7 @@ import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { canPublish } from "@/lib/permissions";
 import { articleOwesSignoff } from "@/lib/article-workflow";
 import type { Toc, TocArticle } from "@/lib/types";
+import { flattenTocArticles } from "@/lib/toc-walk";
 
 /**
  * Walk the TOC and return every article that's blocking publish — i.e. it
@@ -23,22 +24,9 @@ import type { Toc, TocArticle } from "@/lib/types";
  * Articles in neither track are unaffected — review is optional, but once an
  * article enters a track it must be signed off before it can publish.
  */
-function collectArticles(toc: Toc): TocArticle[] {
-  const all: TocArticle[] = [];
-  for (const cat of toc.categories || []) {
-    for (const sec of cat.sections || []) {
-      all.push(...sec.articles);
-      if (sec.subsections) {
-        for (const sub of sec.subsections) all.push(...sub.articles);
-      }
-    }
-  }
-  if (toc.articles) all.push(...toc.articles);
-  return all;
-}
 
 function findBlockingArticles(toc: Toc): Array<{ file: string; title: string }> {
-  return collectArticles(toc)
+  return flattenTocArticles(toc)
     .filter(articleOwesSignoff)
     .map((a) => ({ file: a.file, title: a.title }));
 }
