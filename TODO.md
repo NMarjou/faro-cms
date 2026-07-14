@@ -33,8 +33,4 @@ high-consequence, pure logic as it appears (e.g. the merge/override rules in
 
 ## Known gaps
 
-- **`/toc` authz gap.** The page only blocks contributors, but every save goes
-  through the tech-writer-only `/api/toc`. An author who reaches the URL sees all
-  the editing controls and gets silent "Failed to save". Either gate the page to
-  tech-writers (the nav already hides it) or add owner-authorized structural
-  routes.
+_(none open — add new ones here.)_
