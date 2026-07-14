@@ -26,28 +26,10 @@ once they ship.
 
 ## Testing
 
-- **Add tests for the compile pipeline — especially conditional filtering.**
-  This is the highest-consequence, least-guarded code in the system: it decides
-  what reaches published output. It shipped broken and nobody noticed. In #49 we
-  found conditional content was *never* stripped — `data-tags` is written
-  HTML-escaped (`data-tags="[&quot;advanced&quot;]"`), the parser only read
-  single quotes, `JSON.parse` threw on the entities, and the `catch` fell back to
-  KEEPING the content. Gated material (e.g. `admin-only`) was published to every
-  audience, silently.
-
-  A regression here leaks confidential content and produces no error, so it can
-  only be caught by an assertion. Cover, at minimum:
-  - block + inline conditionals: KEPT for a matching audience, STRIPPED for a
-    non-matching one, surrounding content intact;
-  - no `activeTags` → everything kept;
-  - nested markup (conditional blocks contain nested `<div>`s — a non-greedy
-    regex matched the wrong boundary and orphaned gated content);
-  - the editor's label chip (`⚡ advanced ×`) never reaches published output;
-  - snippet and variable resolution, incl. unknown names.
-
-  The repo has no test runner yet, so this means picking one (vitest is the
-  natural fit for a Next.js/TS codebase) — the compile functions are pure and
-  easy to test directly.
+Vitest is set up (`npm test` / `npm run test:watch`). The compile pipeline is
+covered — see `CMS-app/lib/compile.test.ts`. Extend the same approach to other
+high-consequence, pure logic as it appears (e.g. the merge/override rules in
+`lib/merged-config.ts`, the search index builder).
 
 ## Known gaps
 
