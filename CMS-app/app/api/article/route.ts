@@ -18,11 +18,14 @@ export async function GET(request: NextRequest) {
     const file = await getFile(`content/${filePath}`);
     const content = file.content.trim();
 
-    // Treat as HTML if: .html extension, OR content starts with an HTML tag (no frontmatter)
-    const isHtml =
-      filePath.endsWith(".html") ||
-      content.startsWith("<") ||
-      !content.startsWith("---");
+    // Sniff the BODY, not the extension or the presence of frontmatter. HTML
+    // starts with a tag; anything else (frontmatter or bare markdown) is MDX.
+    //
+    // This used to say `|| !content.startsWith("---")` — "no frontmatter ⇒ HTML"
+    // — which mis-detected a frontmatter-less markdown file as HTML. The editor
+    // would then load it through the HTML path, rendering `# Heading` as literal
+    // text and silently dropping <Var>/<MessageBox> components.
+    const isHtml = content.startsWith("<") || (!content && filePath.endsWith(".html"));
 
     if (isHtml) {
       return NextResponse.json({

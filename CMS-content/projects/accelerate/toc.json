@@ -11,9 +11,10 @@
           "articles": [
             {
               "title": "Getting Started with Passport",
-              "file": "help/passport/getting-started.mdx",
+              "file": "help/passport/getting-started.html",
               "slug": "getting-started-with-passport",
-              "lastModified": "2026-04-23"
+              "lastModified": "2026-04-23",
+              "format": "html"
             }
           ]
         },
@@ -23,14 +24,16 @@
           "articles": [
             {
               "title": "Compensation Planning Overview",
-              "file": "help/planner/compensation-planning.mdx",
+              "file": "help/planner/compensation-planning.html",
               "slug": "compensation-planning-overview",
               "tags": [
                 "planner"
               ],
               "keywords": [
                 "compensation"
-              ]
+              ],
+              "lastModified": "2026-07-14",
+              "format": "html"
             }
           ]
         },
@@ -40,14 +43,17 @@
           "articles": [
             {
               "title": "This is a test article",
-              "file": "help/workbench/this-is-a-test-article.mdx",
-              "slug": "this-is-a-test-article"
+              "file": "help/workbench/this-is-a-test-article.html",
+              "slug": "this-is-a-test-article",
+              "lastModified": "2026-07-14",
+              "format": "html"
             },
             {
               "title": "Data Management Basics",
-              "file": "help/workbench/data-management.mdx",
+              "file": "help/workbench/data-management.html",
               "slug": "data-management-basics",
-              "lastModified": "2026-04-01"
+              "lastModified": "2026-04-01",
+              "format": "html"
             }
           ]
         }
@@ -64,9 +70,10 @@
           "articles": [
             {
               "title": "Integration Hub Overview",
-              "file": "apis/integration-hub/overview.mdx",
+              "file": "apis/integration-hub/overview.html",
               "slug": "integration-hub-overview",
-              "lastModified": "2026-04-01"
+              "lastModified": "2026-04-01",
+              "format": "html"
             }
           ]
         }
@@ -83,12 +90,14 @@
           "articles": [
             {
               "title": "Version 22.0 Release Notes",
-              "file": "release-notes/general/v22-0.mdx",
+              "file": "release-notes/general/v22-0.html",
               "slug": "version-22-0-release-notes",
               "keywords": [
                 "release-notes",
                 "v22"
-              ]
+              ],
+              "lastModified": "2026-07-14",
+              "format": "html"
             }
           ]
         }
@@ -105,9 +114,10 @@
           "articles": [
             {
               "title": "Authentication Setup",
-              "file": "technical-administration/general/authentication.mdx",
+              "file": "technical-administration/general/authentication.html",
               "slug": "authentication-setup",
-              "lastModified": "2026-04-02"
+              "lastModified": "2026-04-02",
+              "format": "html"
             }
           ]
         }
