@@ -69,19 +69,28 @@ export interface Toc {
 
 // ── Article ──
 
+/**
+ * Whatever YAML frontmatter a file happens to carry.
+ *
+ * Article metadata does NOT live here — the TOC entry (`TocArticle`) is the
+ * single source of truth. Frontmatter used to duplicate title/slug/tags/etc.,
+ * which silently went stale (the editor saves the body as HTML and drops the
+ * block entirely). Those fields are gone; the only value we still read is
+ * `name`, which MDX snippets use for their display name.
+ *
+ * If self-describing exported files are ever needed, generate the frontmatter
+ * at compile/publish time as a projection of the TOC — don't reintroduce a copy
+ * that has to be kept in sync.
+ */
 export interface ArticleFrontmatter {
-  title: string;
-  slug: string;
-  category?: string;
-  section?: string;
-  tags?: string[];
-  lastModified?: string;
-  author?: string;
+  /** MDX snippet display name (snippets only). */
+  name?: string;
+  [key: string]: unknown;
 }
 
 export interface Article {
   frontmatter: ArticleFrontmatter;
-  content: string; // MDX body (without frontmatter)
+  content: string; // body (without any frontmatter block)
   filePath: string; // relative path in content/
 }
 

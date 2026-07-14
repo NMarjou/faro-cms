@@ -106,7 +106,10 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
         results.push({
           type: "article",
           id: `article:${article.file}`,
-          title: full.frontmatter.title || article.title,
+          // The TOC entry is the single source of truth for article metadata.
+          // (This used to prefer the body's frontmatter title, so a renamed
+          // article kept showing its old name in search.)
+          title: article.title,
           subtitle: context || undefined,
           bodyText: stripToText(full.content),
           scope: "project",
