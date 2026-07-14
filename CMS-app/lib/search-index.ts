@@ -115,6 +115,8 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
           reviewComplete: article.reviewComplete,
           published: article.published,
           tags: article.tags,
+          summary: article.summary,
+          keywords: article.keywords,
         });
       } catch {
         /* skip unreadable article body */

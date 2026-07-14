@@ -124,6 +124,22 @@ export default function SearchResultRow({ result, selected, query, onSelect, onO
             {excerpt.after}
           </div>
         )}
+        {!excerpt && result.summary && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--fg-muted)",
+              marginTop: 3,
+              lineHeight: 1.4,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {result.summary}
+          </div>
+        )}
         {result.type === "article" && result.tags && result.tags.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
             {result.tags.map((tag) => (

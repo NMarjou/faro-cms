@@ -6,6 +6,12 @@ export interface TocArticle {
   slug: string;
   format?: "html" | "mdx"; // default: "html"
   tags?: string[]; // labels — a subset of the conditions vocabulary
+  /** Short human description of the article. Surfaced in search results and
+   *  listings (and available to published output). */
+  summary?: string;
+  /** Free-text search aids — synonyms/alternate phrasings that should find this
+   *  article. Open vocabulary, unlike `tags` (which is the controlled one). */
+  keywords?: string[];
   createdDate?: string;
   lastModified?: string;
   author?: string; // owner — email of the user who created the article (gates edit rights for the author role)
@@ -246,6 +252,10 @@ export interface SearchResult {
   published?: boolean;
   /** Article labels (from the TOC entry) — searchable and shown as chips. */
   tags?: string[];
+  /** Article summary — searchable, and used as the result's description line. */
+  summary?: string;
+  /** Free-text search aids — indexed, not rendered. */
+  keywords?: string[];
   score?: number; // attached at query time (lower = better, Fuse convention)
 }
 

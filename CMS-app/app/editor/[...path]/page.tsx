@@ -10,6 +10,7 @@ import QuickCreate from "@/components/QuickCreate";
 import SearchButton from "@/components/SearchButton";
 import { revealInExplorer } from "@/components/revealInExplorer";
 import TagPicker from "@/components/TagPicker";
+import KeywordInput from "@/components/KeywordInput";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   canCreateArticles,
@@ -441,11 +442,37 @@ export default function EditorPage() {
     try {
       const slugChanged = articleMeta.slug !== originalMeta.slug;
       const titleChanged = articleMeta.title !== originalMeta.title;
-      const tagsChanged = JSON.stringify(articleMeta.tags) !== JSON.stringify(originalMeta.tags);
+      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+      const descriptiveChanged =
+        !same(articleMeta.tags, originalMeta.tags) ||
+        !same(articleMeta.keywords, originalMeta.keywords) ||
+        (articleMeta.summary || "") !== (originalMeta.summary || "");
+
+      // Descriptive metadata (labels, summary, keywords) goes through the
+      // owner-authorized route — it works for authors on their own articles,
+      // unlike the tech-writer-only /api/toc. Saved first, since a rename below
+      // navigates away.
+      if (descriptiveChanged) {
+        const res = await fetch("/api/article/meta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: filePath,
+            tags: articleMeta.tags || [],
+            keywords: articleMeta.keywords || [],
+            summary: articleMeta.summary || "",
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to save metadata");
+        }
+        setOriginalMeta({ ...articleMeta });
+        setMetaDirty(false);
+      }
 
       if (slugChanged || titleChanged) {
-        // Slug or title changed → use the article-move API (handles file rename + cascade link updates)
-        // Save content first if dirty
+        // Renaming moves the file and rewrites inbound links — tech-writer only.
         if (isDirty) await handleSave();
 
         const res = await fetch("/api/article-move", {
@@ -463,33 +490,13 @@ export default function EditorPage() {
         }
         const result = await res.json();
 
-        // Update original meta to reflect new state
         setOriginalMeta({ ...articleMeta });
         setMetaDirty(false);
 
-        // If the file was actually moved, redirect to the new path
         if (result.fileChanged) {
-          const msg = result.linksRewritten > 0
-            ? `Article renamed. ${result.linksRewritten} link${result.linksRewritten !== 1 ? "s" : ""} updated in other articles.`
-            : "Article renamed.";
-          // Navigate to the new editor URL
           router.push(`/editor/${encodeURIComponent(result.newFile)}`);
           return;
         }
-      } else if (tagsChanged) {
-        // Only labels changed — owner-authorized route (works for authors on
-        // their own articles, unlike the tech-writer-only /api/toc).
-        const res = await fetch("/api/article/tags", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: filePath, tags: articleMeta.tags || [] }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to save labels");
-        }
-        setOriginalMeta({ ...articleMeta });
-        setMetaDirty(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Metadata save failed");
@@ -1085,6 +1092,30 @@ export default function EditorPage() {
                     colors={conditionColors}
                     onChange={(tags) => { setArticleMeta((p) => (p ? { ...p, tags } : p)); setMetaDirty(true); }}
                   />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 4 }}>Summary</label>
+                  <textarea
+                    className="input"
+                    value={articleMeta.summary || ""}
+                    onChange={(e) => { setArticleMeta((p) => (p ? { ...p, summary: e.target.value } : p)); setMetaDirty(true); }}
+                    placeholder="A short description of this article"
+                    rows={3}
+                    style={{ resize: "vertical", fontFamily: "inherit", width: "100%" }}
+                  />
+                  <p style={{ fontSize: 12, color: "var(--fg-muted)", marginTop: 4 }}>
+                    Shown as the article&apos;s description in search results.
+                  </p>
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6 }}>Keywords</label>
+                  <KeywordInput
+                    value={articleMeta.keywords || []}
+                    onChange={(keywords) => { setArticleMeta((p) => (p ? { ...p, keywords } : p)); setMetaDirty(true); }}
+                  />
+                  <p style={{ fontSize: 12, color: "var(--fg-muted)", marginTop: 4 }}>
+                    Synonyms and alternate phrasings that should find this article in search.
+                  </p>
                 </div>
               </div>
               {metaDirty && (
