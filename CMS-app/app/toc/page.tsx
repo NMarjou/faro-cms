@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import { CATEGORY_ICONS } from "@/lib/category-icons";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { isTechWriter } from "@/lib/permissions";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
 
 const SortableList = dynamic(() => import("@/components/SortableList"), {
@@ -129,6 +130,7 @@ export default function TocPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/toc")
@@ -138,21 +140,35 @@ export default function TocPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  /**
+   * Optimistic save with ROLLBACK. The tree updates immediately (edits are
+   * rapid), but if the write fails we restore the previous TOC — otherwise the
+   * UI keeps showing a change that was never persisted, and the next edit is
+   * built on top of a lie. The old version only flashed a 2s "Failed to save"
+   * toast and left the stale tree on screen.
+   */
   const saveToc = async (updated: Toc) => {
-    setToc(updated); // optimistic — keeps the tree responsive across rapid edits
+    const previous = toc;
+    setToc(updated);
     setSaving(true);
+    setError(null);
     try {
       const res = await fetch("/api/toc", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toc: updated }),
       });
-      setMessage(res.ok ? "TOC saved" : "Failed to save");
-    } catch {
-      setMessage("Failed to save");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Save failed (${res.status})`);
+      }
+      setMessage("TOC saved");
+      setTimeout(() => setMessage(null), 2000);
+    } catch (e) {
+      setToc(previous); // never leave an unsaved change on screen
+      setError(e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
-      setTimeout(() => setMessage(null), 2000);
     }
   };
 
@@ -268,7 +284,13 @@ export default function TocPage() {
     if (entry) saveToc(insertArticleAt(without, target, entry, beforeSlug));
   };
 
-  if (loaded && role === "contributor") {
+  // Editing the TOC is structural (categories, sections, ordering, where an
+  // article is filed) and every write goes through the tech-writer-only
+  // /api/toc. The nav already hides this page from everyone else, but the page
+  // itself only blocked contributors — so an author who reached the URL directly
+  // got the full editing UI and every save silently 403'd. Gate it to match the
+  // API and the nav.
+  if (loaded && !isTechWriter(role)) {
     return <TechWriterBlocked title="Table of Contents" />;
   }
 
@@ -381,6 +403,24 @@ export default function TocPage() {
         </div>
       </PageHeader>
       <div className="main-body">
+        {error && (
+          <div
+            style={{
+              background: "var(--danger-light)",
+              color: "var(--danger)",
+              padding: "10px 16px",
+              borderRadius: "var(--radius)",
+              marginBottom: 16,
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ flex: 1 }}>{error} — your change was reverted.</span>
+            <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
+          </div>
+        )}
         {loading && <p>Loading...</p>}
         {toc && (
           <>
