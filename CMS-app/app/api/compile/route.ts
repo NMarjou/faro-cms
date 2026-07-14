@@ -5,17 +5,6 @@ import { getToc, getAllArticlesFromToc } from "@/lib/content";
 import { compileArticle, createSnippetCache } from "@/lib/compile";
 import type { TocCategory, TocSection, TocArticle } from "@/lib/types";
 
-function detectFormat(path: string, content: string): "html" | "mdx" {
-  // Check content first — articles may be saved as HTML regardless of extension
-  const trimmed = content.trimStart();
-  if (trimmed.startsWith("---")) return "mdx";
-  if (trimmed.startsWith("<")) return "html";
-  // Fall back to extension
-  if (path.endsWith(".html") || path.endsWith(".htm")) return "html";
-  if (path.endsWith(".mdx") || path.endsWith(".md")) return "mdx";
-  return "html";
-}
-
 interface CompiledArticle {
   title: string;
   slug: string;
@@ -72,8 +61,7 @@ export async function POST(request: NextRequest) {
           for (const art of sec.articles) {
             try {
               const file = await getFile(`content/${art.file}`, ref);
-              const format = detectFormat(art.file, file.content);
-              const { html, snippets } = await compileArticle(file.content, format, ref, cache, tags);
+              const { html, snippets } = await compileArticle(file.content, ref, cache, tags);
               compiledArticles.push({ title: art.title, slug: art.slug, file: art.file, html, snippets });
               totalArticles++;
             } catch {
@@ -108,8 +96,7 @@ export async function POST(request: NextRequest) {
       for (const article of articles) {
         try {
           const file = await getFile(`content/${article.file}`, ref);
-          const format = detectFormat(article.file, file.content);
-          const { html, snippets } = await compileArticle(file.content, format, ref, cache, tags);
+          const { html, snippets } = await compileArticle(file.content, ref, cache, tags);
           results.push({ path: article.file, html, snippets });
         } catch {
           results.push({ path: article.file, html: "", snippets: [] });
@@ -128,8 +115,7 @@ export async function POST(request: NextRequest) {
     }
 
     const file = await getFile(`content/${path}`, ref);
-    const format = detectFormat(path, file.content);
-    const { html, snippets } = await compileArticle(file.content, format, ref, undefined, tags);
+    const { html, snippets } = await compileArticle(file.content, ref, undefined, tags);
 
     return NextResponse.json({ html, snippets });
   } catch (error) {

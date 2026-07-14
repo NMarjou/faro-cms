@@ -52,13 +52,12 @@ export async function POST(request: NextRequest) {
 
     const base = rel.split("/").pop() || rel;
     const slug = base.replace(ARTICLE_EXT, "");
-    const format: "html" | "mdx" = /\.mdx$/i.test(rel) ? "mdx" : "html";
     const today = new Date().toISOString().split("T")[0];
     const title = deriveTitle(content, slug);
 
     let alreadyInToc = false;
     let entry: TocArticle = {
-      title, file: rel, slug, format,
+      title, file: rel, slug,
       createdDate: today, lastModified: today,
       ...(user!.email ? { author: user!.email } : {}),
     };

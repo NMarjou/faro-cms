@@ -13,8 +13,7 @@
               "title": "Getting Started with Passport",
               "file": "help/passport/getting-started.html",
               "slug": "getting-started-with-passport",
-              "lastModified": "2026-04-23",
-              "format": "html"
+              "lastModified": "2026-04-23"
             }
           ]
         },
@@ -32,8 +31,7 @@
               "keywords": [
                 "compensation"
               ],
-              "lastModified": "2026-07-14",
-              "format": "html"
+              "lastModified": "2026-07-14"
             }
           ]
         },
@@ -45,15 +43,13 @@
               "title": "This is a test article",
               "file": "help/workbench/this-is-a-test-article.html",
               "slug": "this-is-a-test-article",
-              "lastModified": "2026-07-14",
-              "format": "html"
+              "lastModified": "2026-07-14"
             },
             {
               "title": "Data Management Basics",
               "file": "help/workbench/data-management.html",
               "slug": "data-management-basics",
-              "lastModified": "2026-04-01",
-              "format": "html"
+              "lastModified": "2026-04-01"
             }
           ]
         }
@@ -72,8 +68,7 @@
               "title": "Integration Hub Overview",
               "file": "apis/integration-hub/overview.html",
               "slug": "integration-hub-overview",
-              "lastModified": "2026-04-01",
-              "format": "html"
+              "lastModified": "2026-04-01"
             }
           ]
         }
@@ -96,8 +91,7 @@
                 "release-notes",
                 "v22"
               ],
-              "lastModified": "2026-07-14",
-              "format": "html"
+              "lastModified": "2026-07-14"
             }
           ]
         }
@@ -116,8 +110,7 @@
               "title": "Authentication Setup",
               "file": "technical-administration/general/authentication.html",
               "slug": "authentication-setup",
-              "lastModified": "2026-04-02",
-              "format": "html"
+              "lastModified": "2026-04-02"
             }
           ]
         }
