@@ -387,10 +387,11 @@ export default function SidebarTree() {
             className={`tree-branch tree-category${isOpen ? " tree-expanded" : ""}`}
             role="button"
             tabIndex={0}
+            title={category.description || category.name}
             onClick={() => toggle(key)}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(key); } }}
           >
-            <FolderIcon />
+            {category.icon ? <Icon name={category.icon} size={14} /> : <FolderIcon />}
             <span className="tree-label">{category.name}</span>
             <span className={`tree-arrow${isOpen ? " open" : ""}`}><Icon name="caret-right" weight="bold" size={10} /></span>
           </div>

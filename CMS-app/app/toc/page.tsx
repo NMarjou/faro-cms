@@ -5,6 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import dynamic from "next/dynamic";
 import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
 import Icon from "@/components/Icon";
+import { CATEGORY_ICONS } from "@/lib/category-icons";
 import { DragHandle } from "@/components/SortableList";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TechWriterBlocked from "@/components/TechWriterBlocked";
@@ -171,9 +172,26 @@ export default function TocPage() {
     if (!name || !toc) return;
     saveToc({ ...toc, categories: [...toc.categories, { name, slug: slugify(name), description: "", sections: [] }] });
   };
-  const renameCategory = (cat: TocCategory) => {
-    const name = prompt("Rename category:", cat.name)?.trim();
-    if (name) updateCategory(cat.slug, (c) => ({ ...c, name }));
+  // Inline category editor — name, description and icon. A prompt() is fine for
+  // a name but wrong for prose, and the description/icon were previously not
+  // editable at all (descriptions existed in toc.json but had no UI or surface).
+  const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ name: "", description: "", icon: "" });
+
+  const startEditCategory = (cat: TocCategory) => {
+    setEditingCat(cat.slug);
+    setDraft({ name: cat.name, description: cat.description || "", icon: cat.icon || "" });
+  };
+  const saveCategoryEdit = (catSlug: string) => {
+    const name = draft.name.trim();
+    if (!name) return;
+    updateCategory(catSlug, (c) => ({
+      ...c,
+      name,
+      description: draft.description.trim(),
+      icon: draft.icon || undefined,
+    }));
+    setEditingCat(null);
   };
   const removeCategory = (catSlug: string) => {
     if (confirm("Delete this category and all its sections?")) updateCategory(catSlug, () => null);
@@ -383,18 +401,60 @@ export default function TocPage() {
               onReorder={reorderCategories}
               renderItem={(cat, handleProps) => (
                 <div className="card" style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      <DragHandle ref={handleProps.ref} {...handleProps.listeners} />
-                      <h2 style={{ fontSize: 18 }}>{cat.name}</h2>
+                  {editingCat === cat.slug ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <select
+                          className="input"
+                          value={draft.icon}
+                          onChange={(e) => setDraft((d) => ({ ...d, icon: e.target.value }))}
+                          title="Category icon"
+                          style={{ width: "auto", fontSize: 13 }}
+                        >
+                          <option value="">No icon</option>
+                          {CATEGORY_ICONS.map((i) => <option key={i} value={i}>{i}</option>)}
+                        </select>
+                        <span style={{ width: 20, display: "inline-flex", justifyContent: "center", color: "var(--fg-muted)" }}>
+                          {draft.icon && <Icon name={draft.icon} size={18} />}
+                        </span>
+                        <input
+                          className="input"
+                          value={draft.name}
+                          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                          placeholder="Category name"
+                          style={{ flex: 1 }}
+                        />
+                      </div>
+                      <textarea
+                        className="input"
+                        value={draft.description}
+                        onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                        placeholder="Description — shown in the sidebar tooltip and the Articles browser"
+                        rows={2}
+                        style={{ resize: "vertical", fontFamily: "inherit" }}
+                      />
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <button className="btn btn-sm" onClick={() => setEditingCat(null)}>Cancel</button>
+                        <button className="btn btn-sm btn-primary" onClick={() => saveCategoryEdit(cat.slug)} disabled={!draft.name.trim()}>Save</button>
+                      </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                      <button onClick={() => renameCategory(cat)} className="btn btn-sm">Rename</button>
-                      <button onClick={() => addSection(cat.slug)} className="btn btn-sm">Add Section</button>
-                      <button onClick={() => removeCategory(cat.slug)} className="btn btn-sm btn-danger">Delete</button>
-                    </div>
-                  </div>
-                  <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 8 }}>{cat.description || "No description"}</p>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                          <DragHandle ref={handleProps.ref} {...handleProps.listeners} />
+                          {cat.icon && <Icon name={cat.icon} size={18} style={{ color: "var(--fg-muted)" }} />}
+                          <h2 style={{ fontSize: 18 }}>{cat.name}</h2>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                          <button onClick={() => startEditCategory(cat)} className="btn btn-sm">Edit</button>
+                          <button onClick={() => addSection(cat.slug)} className="btn btn-sm">Add Section</button>
+                          <button onClick={() => removeCategory(cat.slug)} className="btn btn-sm btn-danger">Delete</button>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: 13, color: "var(--fg-muted)", marginBottom: 8 }}>{cat.description || "No description"}</p>
+                    </>
+                  )}
                   {cat.sections.length > 0 && renderSections(cat.slug, cat.sections, [])}
                 </div>
               )}
