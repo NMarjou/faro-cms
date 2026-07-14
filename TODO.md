@@ -27,10 +27,18 @@ once they ship.
 
 ## Testing
 
-Vitest is set up (`npm test` / `npm run test:watch`). The compile pipeline is
-covered — see `CMS-app/lib/compile.test.ts`. Extend the same approach to other
-high-consequence, pure logic as it appears (e.g. the merge/override rules in
-`lib/merged-config.ts`, the search index builder).
+Vitest is set up (`npm test` / `npm run test:watch`). Covered so far:
+
+- `lib/compile.test.ts` — the compile pipeline (what reaches published output).
+- `lib/merged-config.test.ts` — the shared/project merge rules (what content a
+  project actually sees).
+
+Both were mutation-checked: reintroduce the bug, confirm a test fails. A test
+that cannot fail is worthless.
+
+Extend the same approach to the remaining high-consequence pure logic — the
+search index builder (`lib/search-index.ts`) and the condition usage scanner
+(`lib/conditions-usage.ts`) are the obvious next candidates.
 
 ## Known gaps
 
