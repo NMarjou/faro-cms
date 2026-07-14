@@ -24,7 +24,13 @@
             {
               "title": "Compensation Planning Overview",
               "file": "help/planner/compensation-planning.mdx",
-              "slug": "compensation-planning-overview"
+              "slug": "compensation-planning-overview",
+              "tags": [
+                "planner"
+              ],
+              "keywords": [
+                "compensation"
+              ]
             }
           ]
         },
@@ -78,7 +84,11 @@
             {
               "title": "Version 22.0 Release Notes",
               "file": "release-notes/general/v22-0.mdx",
-              "slug": "version-22-0-release-notes"
+              "slug": "version-22-0-release-notes",
+              "keywords": [
+                "release-notes",
+                "v22"
+              ]
             }
           ]
         }
