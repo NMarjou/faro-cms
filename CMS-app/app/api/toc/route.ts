@@ -3,10 +3,7 @@ import { getCachedFile, putFile } from "@/lib/storage";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import { setRequestProject } from "@/lib/request-context";
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
+import { NO_STORE } from "@/lib/api-cache";
 
 export async function GET(request: NextRequest) {
   await setRequestProject(request);
@@ -14,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const file = await getCachedFile("content/toc.json", ref);
-    return NextResponse.json(JSON.parse(file.content), { headers: CACHE_HEADERS });
+    return NextResponse.json(JSON.parse(file.content), { headers: NO_STORE });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to read TOC";
     return NextResponse.json({ error: message }, { status: 500 });

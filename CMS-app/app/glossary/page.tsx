@@ -18,6 +18,9 @@ export default function GlossaryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // A failed save used to flash a 2s toast and vanish — indistinguishable
+  // from success. Surface it persistently instead.
+  const [error, setError] = useState<string | null>(null);
   const [newTerm, setNewTerm] = useState("");
   const [newDef, setNewDef] = useState("");
 
@@ -74,8 +77,8 @@ export default function GlossaryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ glossary: { terms: updated } }),
       });
-      if (res.ok) { setTerms(updated); flash("Saved"); } else flash("Failed to save");
-    } catch { flash("Failed to save"); } finally { setSaving(false); }
+      if (res.ok) { setTerms(updated); setError(null); flash("Saved"); } else setError((await res.json().catch(() => ({}))).error || `Save failed (${res.status})`);
+    } catch { setError("Save failed — check your connection."); } finally { setSaving(false); }
   };
   const addSharedTerm = () => {
     if (!newTerm.trim() || !newDef.trim()) return;
@@ -117,8 +120,8 @@ export default function GlossaryPage() {
           body: JSON.stringify({ glossary: { terms: overlayTerms } }),
         });
       }
-      if (res.ok) { flash("Saved"); loadData("project"); } else flash("Failed to save");
-    } catch { flash("Failed to save"); } finally { setSaving(false); }
+      if (res.ok) { setError(null); flash("Saved"); loadData("project"); } else setError((await res.json().catch(() => ({}))).error || `Save failed (${res.status})`);
+    } catch { setError("Save failed — check your connection."); } finally { setSaving(false); }
   };
 
   const overrideCount = Object.keys(overlay).length;
@@ -150,6 +153,12 @@ export default function GlossaryPage() {
         </div>
       </PageHeader>
       <div className="main-body">
+        {error && (
+          <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14, display: "flex", gap: 8 }}>
+            <span style={{ flex: 1 }}>{error}</span>
+            <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
+          </div>
+        )}
         {loading && <p>Loading...</p>}
 
         {scope === "shared" ? (

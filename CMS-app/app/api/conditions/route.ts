@@ -5,6 +5,7 @@ import { loadMergedConditions } from "@/lib/merged-config";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import type { ConditionsConfig } from "@/lib/types";
+import { NO_STORE } from "@/lib/api-cache";
 
 /**
  * Condition tags + colors, project-aware (Phase 1 JSON-merge type).
@@ -16,10 +17,6 @@ import type { ConditionsConfig } from "@/lib/types";
  * Tags/colors previously lived at /api/content?path=conditions.json; this route
  * adds the overlay merge that the generic content endpoint can't express.
  */
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
 
 async function loadSharedConditions(): Promise<ConditionsConfig> {
   try {
@@ -36,10 +33,10 @@ async function loadSharedConditions(): Promise<ConditionsConfig> {
 export async function GET(request: NextRequest) {
   await setRequestProject(request);
   if (request.nextUrl.searchParams.get("scope") === "shared") {
-    return NextResponse.json(await loadSharedConditions(), { headers: CACHE_HEADERS });
+    return NextResponse.json(await loadSharedConditions(), { headers: NO_STORE });
   }
   const { merged, scopes } = await loadMergedConditions();
-  return NextResponse.json({ ...merged, scopes }, { headers: CACHE_HEADERS });
+  return NextResponse.json({ ...merged, scopes }, { headers: NO_STORE });
 }
 
 export async function PUT(request: NextRequest) {

@@ -5,10 +5,7 @@ import { loadMergedVariableSets, loadMergedVariablesFlat } from "@/lib/merged-co
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import type { Variables, VariableSetsData } from "@/lib/types";
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
+import { NO_STORE } from "@/lib/api-cache";
 
 /** Read the SHARED variables.json and normalize to sets, migrating flat→sets. */
 async function loadSharedSets(ref?: string): Promise<VariableSetsData> {
@@ -42,14 +39,14 @@ export async function GET(request: NextRequest) {
     // scope=shared → the shared pool only (for editing shared without folding
     // in this project's overrides). Otherwise merged + per-key scope for the UI.
     if (scope === "shared") {
-      return NextResponse.json(await loadSharedSets(ref), { headers: CACHE_HEADERS });
+      return NextResponse.json(await loadSharedSets(ref), { headers: NO_STORE });
     }
     const { merged, scopes } = await loadMergedVariableSets(ref);
-    return NextResponse.json({ ...merged, scopes }, { headers: CACHE_HEADERS });
+    return NextResponse.json({ ...merged, scopes }, { headers: NO_STORE });
   }
 
   // Default: flat merged object (backward compatible).
-  return NextResponse.json(await loadMergedVariablesFlat(ref), { headers: CACHE_HEADERS });
+  return NextResponse.json(await loadMergedVariablesFlat(ref), { headers: NO_STORE });
 }
 
 export async function PUT(request: NextRequest) {
