@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { getFile } from "./storage";
 import { loadMergedVariablesFlat, loadMergedConditions } from "./merged-config";
+import { flattenTocArticles } from "./toc-walk";
 
 const CONTENT_BASE = "content";
 
@@ -103,21 +104,9 @@ export async function getArticle(
   };
 }
 
+/** @deprecated Use `flattenTocArticles` from lib/toc-walk directly. */
 export function getAllArticlesFromToc(toc: Toc): TocArticle[] {
-  const articles: TocArticle[] = [];
-  for (const category of toc.categories) {
-    collectArticles(category.sections, articles);
-  }
-  return articles;
-}
-
-function collectArticles(sections: TocSection[], result: TocArticle[]) {
-  for (const section of sections) {
-    result.push(...section.articles);
-    if (section.subsections) {
-      collectArticles(section.subsections, result);
-    }
-  }
+  return flattenTocArticles(toc);
 }
 
 // ── Variables ──
