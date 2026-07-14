@@ -4,16 +4,13 @@ import { currentProjectSlug } from "@/lib/content-paths";
 import { listFilesRecursive, SNIPPETS_LIST_PREFIX } from "@/lib/storage";
 import { loadMergedVariablesFlat, loadMergedGlossary, loadMergedConditions, loadMergedStyles } from "@/lib/merged-config";
 import { memoize } from "@/lib/cache";
+import { NO_STORE } from "@/lib/api-cache";
 
 /**
  * Bundles all editor-toolbar metadata into a single response so the editor
  * page makes one HTTP round-trip instead of five. Cuts both wall-clock
  * (browser 6-connection limit) and per-route dev-compile overhead.
  */
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
 
 type EditorMeta = {
   variables: Record<string, string>;
@@ -62,5 +59,5 @@ export async function GET(request: NextRequest) {
     snippetNames,
   };
 
-  return NextResponse.json(meta, { headers: CACHE_HEADERS });
+  return NextResponse.json(meta, { headers: NO_STORE });
 }

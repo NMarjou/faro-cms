@@ -5,10 +5,7 @@ import { loadMergedGlossary } from "@/lib/merged-config";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import type { Glossary } from "@/lib/types";
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
+import { NO_STORE } from "@/lib/api-cache";
 
 /** Read the SHARED glossary only (for editing shared without folding overrides). */
 async function loadSharedGlossary(): Promise<Glossary> {
@@ -24,11 +21,11 @@ export async function GET(request: NextRequest) {
   await setRequestProject(request);
   const scope = request.nextUrl.searchParams.get("scope");
   if (scope === "shared") {
-    return NextResponse.json(await loadSharedGlossary(), { headers: CACHE_HEADERS });
+    return NextResponse.json(await loadSharedGlossary(), { headers: NO_STORE });
   }
   // Merged (shared + this project's overlay) with per-term scope for the UI.
   const { merged, scopes } = await loadMergedGlossary();
-  return NextResponse.json({ ...merged, scopes }, { headers: CACHE_HEADERS });
+  return NextResponse.json({ ...merged, scopes }, { headers: NO_STORE });
 }
 
 export async function PUT(request: NextRequest) {

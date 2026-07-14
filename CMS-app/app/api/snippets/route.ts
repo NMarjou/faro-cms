@@ -6,6 +6,7 @@ import { currentProjectSlug } from "@/lib/content-paths";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import matter from "gray-matter";
+import { NO_STORE } from "@/lib/api-cache";
 
 // `shared` distinguishes the shared-pool copy from a project-local override.
 type SnippetEntry = { name: string; file: string; folder: string; shared: boolean };
@@ -107,10 +108,6 @@ async function buildListing(full: boolean): Promise<SnippetListing> {
   return { folders, snippets };
 }
 
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
-
 export async function GET(request: NextRequest) {
   await setRequestProject(request);
   const full = request.nextUrl.searchParams.get("full") === "1";
@@ -122,9 +119,9 @@ export async function GET(request: NextRequest) {
       `${SNIPPETS_LIST_PREFIX}${currentProjectSlug()}:${full ? "full" : "lite"}`,
       () => buildListing(full)
     );
-    return NextResponse.json(data, { headers: CACHE_HEADERS });
+    return NextResponse.json(data, { headers: NO_STORE });
   } catch {
-    return NextResponse.json({ folders: [], snippets: [] }, { headers: CACHE_HEADERS });
+    return NextResponse.json({ folders: [], snippets: [] }, { headers: NO_STORE });
   }
 }
 

@@ -5,6 +5,7 @@ import { loadMergedStyles } from "@/lib/merged-config";
 import { getRequestUser, forbidden } from "@/lib/server-auth";
 import { isTechWriter } from "@/lib/permissions";
 import type { ContentStyle } from "@/lib/types";
+import { NO_STORE } from "@/lib/api-cache";
 
 /**
  * Paragraph/character styles (styles.json = ContentStyle[]), project-aware
@@ -15,10 +16,6 @@ import type { ContentStyle } from "@/lib/types";
  *   PUT  ?scope=…     → shared writes the pool; project writes a sparse overlay
  *   DELETE ?scope=project → clear this project's style overrides
  */
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
 
 async function loadSharedStyles(): Promise<ContentStyle[]> {
   try {
@@ -32,10 +29,10 @@ async function loadSharedStyles(): Promise<ContentStyle[]> {
 export async function GET(request: NextRequest) {
   await setRequestProject(request);
   if (request.nextUrl.searchParams.get("scope") === "shared") {
-    return NextResponse.json({ styles: await loadSharedStyles() }, { headers: CACHE_HEADERS });
+    return NextResponse.json({ styles: await loadSharedStyles() }, { headers: NO_STORE });
   }
   const { merged, scopes } = await loadMergedStyles();
-  return NextResponse.json({ styles: merged, scopes }, { headers: CACHE_HEADERS });
+  return NextResponse.json({ styles: merged, scopes }, { headers: NO_STORE });
 }
 
 export async function PUT(request: NextRequest) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setRequestProject } from "@/lib/request-context";
 import { buildConditionUsage } from "@/lib/conditions-usage";
+import { NO_STORE } from "@/lib/api-cache";
 
 /**
  * GET /api/conditions/usage → { usage: { [tag]: { labels: [], inline: [] } } }
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const usage = await buildConditionUsage();
     return NextResponse.json(
       { usage },
-      { headers: { "Cache-Control": "private, max-age=30" } }
+      { headers: NO_STORE }
     );
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to compute usage";

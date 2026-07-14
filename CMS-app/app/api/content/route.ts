@@ -3,6 +3,7 @@ import { setRequestProject } from "@/lib/request-context";
 import { getFile, getCachedFile, putFile, deleteFile, resolvePhysicalSubpath } from "@/lib/storage";
 import { getRequestUser, canWriteContentPath, forbidden } from "@/lib/server-auth";
 import { syncArticleWorkflowOnSave } from "@/lib/article-workflow";
+import { NO_STORE } from "@/lib/api-cache";
 
 // Small metadata files the editor reads on every article open. Caching
 // these via getCachedFile means hundreds of editor opens share one read;
@@ -13,10 +14,6 @@ const CACHEABLE_PATHS = new Set([
   "dictionary.json",
   "editor-styles.css",
 ]);
-
-const CACHE_HEADERS = {
-  "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
-};
 
 export async function GET(request: NextRequest) {
   await setRequestProject(request);
@@ -55,7 +52,7 @@ export async function GET(request: NextRequest) {
     const file = useCached
       ? await getCachedFile(`content/${path}`)
       : await getFile(`content/${path}`, ref);
-    return NextResponse.json(file, useCached ? { headers: CACHE_HEADERS } : undefined);
+    return NextResponse.json(file, useCached ? { headers: NO_STORE } : undefined);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to read file";
     return NextResponse.json({ error: message }, { status: 404 });
