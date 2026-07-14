@@ -210,8 +210,8 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
     /* no glossary */
   }
 
-  // Conditions — merged; name-only (tag). No dedicated page → open the TOC,
-  // where tags are applied to articles.
+  // Conditions — merged; name-only (tag). Deep-links into the conditions
+  // manager, like the other config types.
   try {
     const { merged, scopes } = await loadMergedConditions();
     for (const tag of merged.tags) {
@@ -220,7 +220,7 @@ export async function buildSearchIndex(): Promise<SearchResult[]> {
         id: `condition:${tag}`,
         title: tag,
         scope: scopes[tag] ?? "shared",
-        href: "/toc",
+        href: deepLink("/conditions", tag, scopes[tag] ?? "shared"),
       });
     }
   } catch {

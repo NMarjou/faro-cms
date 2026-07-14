@@ -580,6 +580,7 @@ export default function SidebarTree() {
             </>
           )}
           {navItem("/glossary", "book-open", "Glossary", pathname === "/glossary")}
+          {techWriter && navItem("/conditions", "tag", "Conditions", pathname === "/conditions")}
           {techWriter && (
             <>
               {navItem("/publish", "cloud-arrow-up", "Publish", pathname === "/publish")}
@@ -864,6 +865,13 @@ export default function SidebarTree() {
           <Link href="/styles" className={`tree-nav-link${pathname === "/styles" ? " active" : ""}`}>
             <Icon name="palette" />
             Styles
+          </Link>
+        )}
+
+        {techWriter && (
+          <Link href="/conditions" className={`tree-nav-link${pathname === "/conditions" ? " active" : ""}`}>
+            <Icon name="tag" />
+            Conditions
           </Link>
         )}
 
