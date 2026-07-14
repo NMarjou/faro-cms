@@ -16,13 +16,14 @@ once they ship.
 
 ## Content model
 
-- **Review implementation of conditions.** Conditions (tags) have no dedicated
-  management page — they're applied to articles from `/toc`, with no per-tag
-  surface to view/edit/rename/delete a tag on its own. This is why search
-  results for conditions open `/toc` rather than deep-linking to the tag (unlike
-  variables/glossary/styles, which now deep-link + highlight the specific
-  entry). Revisit whether conditions deserve a proper manager; if so, wire
-  condition search results to deep-link into it.
+- **Renaming a condition tag.** The conditions manager (`/conditions`) can add,
+  recolour and delete tags, but not rename one. A rename is a CASCADE, not an
+  edit: the tag is referenced by `TocArticle.tags` (labels) *and* embedded in
+  article bodies as `data-tags` on every conditional block/mark. Renaming
+  without rewriting both would silently strip that content from published output
+  (the tag would no longer match a selected audience). Model it on
+  `/api/article-move`, which already does a rename-plus-cascade, and reuse
+  `lib/conditions-usage.ts` to find every affected article.
 
 ## Testing
 

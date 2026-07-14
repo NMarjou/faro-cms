@@ -65,7 +65,7 @@ export function resolveVariables(content: string, variables: Variables): string 
  * fell back to KEEPING the content. Result: conditional content was never
  * stripped — gated material (e.g. admin-only) shipped to every audience.
  */
-function parseTags(openTag: string): string[] | null {
+export function parseTags(openTag: string): string[] | null {
   const m = openTag.match(/data-tags=(?:'([^']*)'|"([^"]*)")/i);
   if (!m) return null;
   const raw = (m[1] ?? m[2] ?? "")
