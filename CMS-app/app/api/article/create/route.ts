@@ -71,7 +71,6 @@ export async function POST(request: NextRequest) {
             title: cleanTitle,
             file,
             slug: cleanSlug,
-            format: "html",
             createdDate: today,
             lastModified: today,
             ...(user!.email ? { author: user!.email } : {}),

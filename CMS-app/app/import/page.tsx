@@ -134,7 +134,7 @@ function FileList({ files, onRemove }: { files: FileData[]; onRemove: (index: nu
 
 // ─── TOC structure types for article mapping ────────────────────────
 interface TocData {
-  categories: { name: string; slug: string; description: string; sections: { name: string; slug: string; articles: { title: string; slug: string; file: string; format?: string; tags?: string[]; conditions?: string[] }[] }[] }[];
+  categories: { name: string; slug: string; description: string; sections: { name: string; slug: string; articles: { title: string; slug: string; file: string; tags?: string[]; conditions?: string[] }[] }[] }[];
 }
 
 interface ArticleMapping {
@@ -286,7 +286,6 @@ function ArticlesTab() {
             title: m.title,
             slug: artSlug,
             file: m.path,
-            format: "html",
             tags: [],
           });
         }

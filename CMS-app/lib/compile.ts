@@ -2,11 +2,19 @@ import { getSnippet, getVariables } from "./content";
 import type { Variables } from "./types";
 
 /**
- * Resolve snippet references in article content.
+ * Compilation is HTML-only.
+ *
+ * The editor is TipTap and always saves HTML, so HTML is the storage format for
+ * every article and snippet. These functions used to branch on a `format`
+ * ("html" | "mdx") and carry a parallel set of MDX patterns (<Snippet/>, <Var/>,
+ * <Conditional>, <Cond>) — but no producer ever emitted MDX, so that half was
+ * unreachable. Markdown/MDX now only exists as an *input* (see
+ * lib/editor/deserialize.ts), converted to HTML on load.
  */
+
+/** Resolve snippet references, inlining each snippet's body. */
 export async function resolveSnippets(
   content: string,
-  format: "html" | "mdx",
   ref?: string,
   cache?: Map<string, string>
 ): Promise<{ resolved: string; snippets: string[] }> {
@@ -26,145 +34,165 @@ export async function resolveSnippets(
   }
 
   let resolved = content;
-
-  if (format === "html") {
-    const htmlPattern = /<div[^>]*data-node-type="snippet"[^>]*data-snippet="([^"]+)"[^>]*>[\s\S]*?<\/div>/g;
-    const matches = [...content.matchAll(htmlPattern)];
-    for (const match of matches) {
-      const name = match[1];
-      usedSnippets.push(name);
-      const body = await loadSnippet(name);
-      resolved = resolved.replace(match[0], body);
-    }
-  } else {
-    const mdxPattern = /<Snippet\s+file="([^"]+)"\s*\/>/g;
-    const matches = [...content.matchAll(mdxPattern)];
-    for (const match of matches) {
-      const name = match[1];
-      usedSnippets.push(name);
-      const body = await loadSnippet(name);
-      resolved = resolved.replace(match[0], body);
-    }
+  const pattern = /<div[^>]*data-node-type="snippet"[^>]*data-snippet="([^"]+)"[^>]*>[\s\S]*?<\/div>/g;
+  for (const match of [...content.matchAll(pattern)]) {
+    const name = match[1];
+    usedSnippets.push(name);
+    resolved = resolved.replace(match[0], await loadSnippet(name));
   }
 
   return { resolved, snippets: usedSnippets };
 }
 
-/**
- * Resolve variable references in article content, replacing them with actual values.
- */
-export function resolveVariables(
-  content: string,
-  variables: Variables,
-  format: "html" | "mdx"
-): string {
-  let resolved = content;
-
-  if (format === "html") {
-    // Match TipTap HTML: <span> with data-node-type="variable" and data-variable="NAME" (any attribute order)
-    const htmlPattern = /<span[^>]*data-variable="([^"]+)"[^>]*data-node-type="variable"[^>]*>[^<]*<\/span>|<span[^>]*data-node-type="variable"[^>]*data-variable="([^"]+)"[^>]*>[^<]*<\/span>/g;
-    resolved = resolved.replace(htmlPattern, (_match, name1: string, name2: string) => {
-      const name = name1 || name2;
-      return variables[name] ?? `{${name}}`;
-    });
-  } else {
-    // Match MDX: <Var name="NAME" />
-    const mdxPattern = /<Var\s+name="([^"]+)"\s*\/>/g;
-    resolved = resolved.replace(mdxPattern, (_match, name: string) => {
-      return variables[name] ?? `{${name}}`;
-    });
-  }
-
-  return resolved;
+/** Replace variable nodes with their values (unknown names stay as {name}). */
+export function resolveVariables(content: string, variables: Variables): string {
+  // TipTap emits <span> with data-node-type="variable" + data-variable="NAME"
+  // (attribute order isn't guaranteed, hence the two alternatives).
+  const pattern = /<span[^>]*data-variable="([^"]+)"[^>]*data-node-type="variable"[^>]*>[^<]*<\/span>|<span[^>]*data-node-type="variable"[^>]*data-variable="([^"]+)"[^>]*>[^<]*<\/span>/g;
+  return content.replace(pattern, (_match, name1: string, name2: string) => {
+    const name = name1 || name2;
+    return variables[name] ?? `{${name}}`;
+  });
 }
 
 /**
- * Resolve conditional blocks: keep content if any tag matches activeTags, strip otherwise.
- * If activeTags is empty or undefined, keep all conditional content.
+ * Read `data-tags` off an opening tag.
+ *
+ * The editor writes it HTML-ESCAPED and double-quoted:
+ *   data-tags="[&quot;advanced&quot;]"
+ * The old implementation only looked for a single-quoted `data-tags='…'`, and
+ * when it did match, JSON.parse choked on the `&quot;` entities and the catch
+ * fell back to KEEPING the content. Result: conditional content was never
+ * stripped — gated material (e.g. admin-only) shipped to every audience.
+ */
+function parseTags(openTag: string): string[] | null {
+  const m = openTag.match(/data-tags=(?:'([^']*)'|"([^"]*)")/i);
+  if (!m) return null;
+  const raw = (m[1] ?? m[2] ?? "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+  try {
+    const tags = JSON.parse(raw);
+    return Array.isArray(tags) ? tags.map(String) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Replace every `<tagName>` element whose opening tag matches `openRe`, using a
+ * depth counter to find its true closing tag. A regex can't do this: conditional
+ * blocks nest <div>s (label chip + content), so a non-greedy `…</div>` match
+ * ends at the wrong boundary and leaves gated content orphaned in the output.
+ */
+function replaceBalanced(
+  html: string,
+  tagName: "div" | "span",
+  openRe: RegExp,
+  decide: (tags: string[] | null, inner: string) => string
+): string {
+  const openAny = new RegExp(`<${tagName}\\b`, "gi");
+  const closeAny = new RegExp(`</${tagName}\\s*>`, "gi");
+  let out = "";
+  let cursor = 0;
+  openRe.lastIndex = 0;
+
+  let m: RegExpExecArray | null;
+  while ((m = openRe.exec(html)) !== null) {
+    if (m.index < cursor) continue; // already consumed as part of an outer block
+    out += html.slice(cursor, m.index);
+
+    const openTag = m[0];
+    let depth = 1;
+    let pos = m.index + openTag.length;
+    let closeStart = -1;
+    let closeEnd = -1;
+
+    while (pos < html.length && depth > 0) {
+      openAny.lastIndex = pos;
+      closeAny.lastIndex = pos;
+      const o = openAny.exec(html);
+      const c = closeAny.exec(html);
+      if (!c) break; // unbalanced — bail out below
+      if (o && o.index < c.index) {
+        depth++;
+        pos = o.index + o[0].length;
+      } else {
+        depth--;
+        pos = c.index + c[0].length;
+        if (depth === 0) { closeStart = c.index; closeEnd = pos; }
+      }
+    }
+
+    if (closeStart === -1) { out += html.slice(m.index); return out; } // malformed
+    out += decide(parseTags(openTag), html.slice(m.index + openTag.length, closeStart));
+    cursor = closeEnd;
+    openRe.lastIndex = cursor;
+  }
+
+  return out + html.slice(cursor);
+}
+
+/** Drop the editor's conditional-block label chip ("⚡ advanced ×") — it's
+ *  authoring chrome and must not reach published output. */
+function stripConditionalChrome(inner: string): string {
+  return inner.replace(
+    /<div[^>]*contenteditable="false"[^>]*>[\s\S]*?<\/div>/gi,
+    (block) => (/remove-conditional-block/.test(block) ? "" : block)
+  );
+}
+
+/**
+ * Keep conditional content whose tags intersect `activeTags`, strip the rest.
+ * An empty/absent `activeTags` keeps everything (no audience selected).
  */
 export function resolveConditionals(
   content: string,
-  activeTags: string[] | undefined,
-  format: "html" | "mdx"
+  activeTags: string[] | undefined
 ): string {
   if (!activeTags || activeTags.length === 0) return content;
 
-  let resolved = content;
+  // Unreadable tags → keep the content. Failing open risks over-publishing, but
+  // failing closed would silently delete authored content; parseTags now handles
+  // the real markup, so this is a guard rather than a routine path.
+  const keepBlock = (tags: string[] | null, inner: string) => {
+    if (!tags) return stripConditionalChrome(inner);
+    return tags.some((t) => activeTags.includes(t)) ? stripConditionalChrome(inner) : "";
+  };
+  const keepInline = (tags: string[] | null, inner: string) => {
+    if (!tags) return inner;
+    return tags.some((t) => activeTags.includes(t)) ? inner : "";
+  };
 
-  if (format === "html") {
-    // Block-level: <div data-node-type="conditional" data-tags='[...]'>...inner...</div>
-    const htmlBlockPattern = /<div[^>]*data-node-type="conditional"[^>]*>([\s\S]*?)<\/div>/g;
-    resolved = resolved.replace(htmlBlockPattern, (match, inner: string) => {
-      const tagsMatch = match.match(/data-tags='([^']*)'/);
-      if (!tagsMatch) return inner;
-      try {
-        const tags: string[] = JSON.parse(tagsMatch[1]);
-        return tags.some((t) => activeTags.includes(t)) ? inner : "";
-      } catch { return inner; }
-    });
-
-    // Inline: <span data-mark-type="conditional" data-tags='[...]'>...inner...</span>
-    const htmlInlinePattern = /<span[^>]*data-mark-type="conditional"[^>]*>([\s\S]*?)<\/span>/g;
-    resolved = resolved.replace(htmlInlinePattern, (match, inner: string) => {
-      const tagsMatch = match.match(/data-tags='([^']*)'/) || match.match(/data-tags="([^"]*)"/);
-      if (!tagsMatch) return inner;
-      try {
-        const tags: string[] = JSON.parse(tagsMatch[1]);
-        return tags.some((t) => activeTags.includes(t)) ? inner : "";
-      } catch { return inner; }
-    });
-  } else {
-    // Block-level MDX: <Conditional tags={[...]}>...inner...</Conditional>
-    const mdxBlockPattern = /<Conditional\s+tags=\{(\[.*?\])\}\s*>([\s\S]*?)<\/Conditional>/g;
-    resolved = resolved.replace(mdxBlockPattern, (_match, tagsJson: string, inner: string) => {
-      try {
-        const tags: string[] = JSON.parse(tagsJson);
-        return tags.some((t) => activeTags.includes(t)) ? inner.trim() : "";
-      } catch { return inner.trim(); }
-    });
-
-    // Inline MDX: <Cond tags={[...]}>text</Cond>
-    const mdxInlinePattern = /<Cond\s+tags=\{(\[.*?\])\}>([\s\S]*?)<\/Cond>/g;
-    resolved = resolved.replace(mdxInlinePattern, (_match, tagsJson: string, inner: string) => {
-      try {
-        const tags: string[] = JSON.parse(tagsJson);
-        return tags.some((t) => activeTags.includes(t)) ? inner : "";
-      } catch { return inner; }
-    });
-  }
-
-  return resolved;
+  let out = replaceBalanced(
+    content, "div", /<div\b[^>]*data-node-type="conditional"[^>]*>/gi, keepBlock
+  );
+  out = replaceBalanced(
+    out, "span", /<span\b[^>]*data-mark-type="conditional"[^>]*>/gi, keepInline
+  );
+  return out;
 }
 
-/**
- * Fully compile an article: resolve snippets, variables, and conditionals.
- */
+/** Fully compile an article: snippets → variables → conditionals. */
 export async function compileArticle(
   content: string,
-  format: "html" | "mdx",
   ref?: string,
   snippetCache?: Map<string, string>,
   activeTags?: string[]
 ): Promise<{ html: string; snippets: string[] }> {
   const variables = await getVariables(ref);
 
-  // 1. Resolve snippets (they may contain variables/conditionals)
-  const { resolved: afterSnippets, snippets } = await resolveSnippets(
-    content, format, ref, snippetCache
-  );
-
-  // 2. Resolve variables
-  const afterVars = resolveVariables(afterSnippets, variables, format);
-
-  // 3. Resolve conditionals
-  const html = resolveConditionals(afterVars, activeTags, format);
+  // Snippets first — their bodies may themselves contain variables/conditionals.
+  const { resolved: afterSnippets, snippets } = await resolveSnippets(content, ref, snippetCache);
+  const afterVars = resolveVariables(afterSnippets, variables);
+  const html = resolveConditionals(afterVars, activeTags);
 
   return { html, snippets };
 }
 
-/**
- * Create a shared snippet cache for batch compilation.
- */
+/** Create a shared snippet cache for batch compilation. */
 export function createSnippetCache(): Map<string, string> {
   return new Map();
 }

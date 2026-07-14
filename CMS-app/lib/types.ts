@@ -4,7 +4,6 @@ export interface TocArticle {
   title: string;
   file: string; // relative path, e.g. "help/passport/overview.html"
   slug: string;
-  format?: "html" | "mdx"; // default: "html"
   tags?: string[]; // labels — a subset of the conditions vocabulary
   /** Short human description of the article. Surfaced in search results and
    *  listings (and available to published output). */

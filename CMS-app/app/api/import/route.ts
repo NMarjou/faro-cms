@@ -159,7 +159,6 @@ function convertFlareTocToCms(flareEntries: FlareTocEntry[]): Toc {
           title: artTitle,
           slug: artSlug,
           file: filePath.toLowerCase(),
-          format: "html",
           tags: [],
         });
 
@@ -175,7 +174,6 @@ function convertFlareTocToCms(flareEntries: FlareTocEntry[]): Toc {
               title: subTitle,
               slug: subSlug,
               file: subFile.toLowerCase(),
-              format: "html",
               tags: [],
             });
           }
