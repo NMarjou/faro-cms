@@ -127,6 +127,24 @@ export async function getFileAt(sub: string, ref?: string): Promise<GitHubFile> 
   return { path: subpathToContent(sub), content, sha: data.sha, encoding: "utf-8" };
 }
 
+/** Raw bytes of a blob — for binary files (images), which utf-8 decoding would
+ *  corrupt. Used by the site build to copy assets into published output. */
+export async function getFileBytesAt(sub: string, ref?: string): Promise<Buffer> {
+  if (!ref) await ensureWorkingBranch();
+  const octokit = getOctokit();
+  const { owner, repo } = getRepo();
+  const { data } = await octokit.rest.repos.getContent({
+    owner,
+    repo,
+    path: repoPathForSub(sub),
+    ref: ref || workingBranch(),
+  });
+  if (Array.isArray(data) || data.type !== "file") {
+    throw new Error(`Path ${sub} is not a file`);
+  }
+  return Buffer.from(data.content.replace(/\n/g, ""), "base64");
+}
+
 export async function listFilesAt(sub: string, ref?: string): Promise<string[]> {
   if (!ref) await ensureWorkingBranch();
   const octokit = getOctokit();

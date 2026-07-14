@@ -135,13 +135,19 @@ function replaceBalanced(
   return out + html.slice(cursor);
 }
 
-/** Drop the editor's conditional-block label chip ("⚡ advanced ×") — it's
- *  authoring chrome and must not reach published output. */
+/**
+ * Drop the editor's conditional-block label chip ("⚡ advanced") — authoring
+ * chrome that must never reach a reader.
+ *
+ * Keyed on `contenteditable="false"`, not on the chip's × control: older content
+ * renders the chip WITHOUT the remove button, so keying on that marker left the
+ * chip in the published page. `contenteditable` is an editor-only attribute, and
+ * by the time conditionals are resolved the other nodes that carry it (variables,
+ * snippets) have already been replaced — so inside a conditional block, a
+ * contenteditable div is always the chip.
+ */
 function stripConditionalChrome(inner: string): string {
-  return inner.replace(
-    /<div[^>]*contenteditable="false"[^>]*>[\s\S]*?<\/div>/gi,
-    (block) => (/remove-conditional-block/.test(block) ? "" : block)
-  );
+  return inner.replace(/<div[^>]*contenteditable="false"[^>]*>[\s\S]*?<\/div>/gi, "");
 }
 
 /**
@@ -152,19 +158,28 @@ export function resolveConditionals(
   content: string,
   activeTags: string[] | undefined
 ): string {
-  if (!activeTags || activeTags.length === 0) return content;
+  // "Keep all the content" and "leave the markup alone" are DIFFERENT things.
+  // This used to return `content` untouched when no audience was selected, which
+  // was invisible while compile output stayed inside the CMS — but published
+  // pages then carried the raw conditional wrappers AND the editor's label chip
+  // ("⚡ advanced ×") straight to the reader. The wrappers are always unwrapped;
+  // only the keep/strip DECISION depends on activeTags.
+  const keepAll = !activeTags || activeTags.length === 0;
 
   // Unreadable tags → keep the content. Failing open risks over-publishing, but
   // failing closed would silently delete authored content; parseTags now handles
   // the real markup, so this is a guard rather than a routine path.
-  const keepBlock = (tags: string[] | null, inner: string) => {
-    if (!tags) return stripConditionalChrome(inner);
-    return tags.some((t) => activeTags.includes(t)) ? stripConditionalChrome(inner) : "";
-  };
-  const keepInline = (tags: string[] | null, inner: string) => {
-    if (!tags) return inner;
-    return tags.some((t) => activeTags.includes(t)) ? inner : "";
-  };
+  const kept = (tags: string[] | null) =>
+    keepAll || !tags || tags.some((t) => activeTags!.includes(t));
+
+  // Conditionals NEST (a gated block inside another gated block). Unwrapping the
+  // outer one and returning its inner content verbatim left the inner wrapper —
+  // and its editor chrome — in the output. Recurse: `inner` is strictly smaller
+  // than `content`, so this terminates.
+  const keepBlock = (tags: string[] | null, inner: string) =>
+    kept(tags) ? resolveConditionals(stripConditionalChrome(inner), activeTags) : "";
+  const keepInline = (tags: string[] | null, inner: string) =>
+    kept(tags) ? resolveConditionals(inner, activeTags) : "";
 
   let out = replaceBalanced(
     content, "div", /<div\b[^>]*data-node-type="conditional"[^>]*>/gi, keepBlock

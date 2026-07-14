@@ -33,6 +33,15 @@ interface CompileResult {
   stats: { totalArticles: number; totalErrors: number; totalCategories: number };
 }
 
+/** Build report from /api/site/build?report — the gaps you can't see in the
+ *  output: links that go nowhere, articles with no home in the published tree. */
+interface SiteReport {
+  pages: number;
+  assets: number;
+  brokenLinks: { page: string; href: string }[];
+  unfiled: string[];
+}
+
 function countArticles(cat: TocCategory): number {
   let count = 0;
   for (const sec of cat.sections) {
@@ -59,6 +68,9 @@ export default function PublishPage() {
   const [publishingAll, setPublishingAll] = useState(false);
   const [publishAllUrl, setPublishAllUrl] = useState<string | null>(null);
   const [publishAllMsg, setPublishAllMsg] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
+  const [site, setSite] = useState<SiteReport | null>(null);
+  const [siteError, setSiteError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load TOC
@@ -169,6 +181,56 @@ export default function PublishPage() {
     URL.revokeObjectURL(url);
   };
 
+  /** Build the static site. Reports first — a broken link or an unfiled article
+   *  is invisible in the output itself (a dead link renders fine and just goes
+   *  nowhere), so they have to be surfaced BEFORE the site ships. */
+  const handleBuildSite = async () => {
+    setBuilding(true);
+    setSite(null);
+    setSiteError(null);
+    try {
+      const res = await fetch("/api/site/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeTags: [...activeTags], report: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Site build failed");
+      setSite(data as SiteReport);
+    } catch (err) {
+      setSiteError(err instanceof Error ? err.message : "Site build failed");
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  const handleDownloadSite = async () => {
+    setBuilding(true);
+    setSiteError(null);
+    try {
+      const res = await fetch("/api/site/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeTags: [...activeTags] }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Site build failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `site-${new Date().toISOString().split("T")[0]}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSiteError(err instanceof Error ? err.message : "Site build failed");
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   const handlePublishAll = async () => {
     setPublishingAll(true);
     setPublishAllMsg(null);
@@ -218,6 +280,16 @@ export default function PublishPage() {
           {canPublish(role) && (
             <button
               className="btn"
+              disabled={building}
+              onClick={handleBuildSite}
+              title="Build the static site for this project — every article as a page, with images copied out and internal links resolved. Ready to deploy to Vercel."
+            >
+              {building ? "Building…" : "Build site"}
+            </button>
+          )}
+          {canPublish(role) && (
+            <button
+              className="btn"
               disabled={publishingAll}
               onClick={handlePublishAll}
               title="Open a PR with every pending change on the working branch — shared resources (snippets, variables, glossary, images, TOC structure) and bulk releases. Individual articles publish from the editor."
@@ -250,6 +322,53 @@ export default function PublishPage() {
         {publishAllMsg && (
           <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>
             {publishAllMsg}
+          </div>
+        )}
+
+        {siteError && (
+          <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>
+            {siteError}
+          </div>
+        )}
+
+        {site && (
+          <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 16, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: site.brokenLinks.length || site.unfiled.length ? 12 : 0 }}>
+              <div style={{ fontSize: 14 }}>
+                <strong>{site.pages}</strong> page{site.pages !== 1 ? "s" : ""},{" "}
+                <strong>{site.assets}</strong> asset{site.assets !== 1 ? "s" : ""}
+                {activeTags.size > 0 && (
+                  <span style={{ color: "var(--fg-muted)" }}>
+                    {" "}· audience: {[...activeTags].join(", ")}
+                  </span>
+                )}
+              </div>
+              <button className="btn btn-primary" disabled={building} onClick={handleDownloadSite}>
+                {building ? "Building…" : "Download site (.zip)"}
+              </button>
+            </div>
+
+            {/* A dead link renders perfectly and simply goes nowhere; an unfiled
+                article just never appears. Neither is visible in the built output,
+                so both are named here. */}
+            {site.unfiled.length > 0 && (
+              <div style={{ background: "var(--warning-light)", color: "var(--warning)", padding: "8px 12px", borderRadius: "var(--radius)", fontSize: 13, marginBottom: 8 }}>
+                <strong>{site.unfiled.length} article{site.unfiled.length !== 1 ? "s" : ""} not in the TOC</strong> — not published (no place in the tree):{" "}
+                {site.unfiled.join(", ")}
+              </div>
+            )}
+            {site.brokenLinks.length > 0 && (
+              <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "8px 12px", borderRadius: "var(--radius)", fontSize: 13 }}>
+                <strong>{site.brokenLinks.length} broken link{site.brokenLinks.length !== 1 ? "s" : ""}</strong> — kept as-is, they lead nowhere:
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                  {site.brokenLinks.slice(0, 8).map((b, i) => (
+                    <li key={i}>
+                      <code>{b.href}</code> in {b.page}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
