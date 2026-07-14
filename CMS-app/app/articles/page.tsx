@@ -7,6 +7,7 @@ import type { Toc, TocCategory, TocArticle } from "@/lib/types";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { canCreateArticles } from "@/lib/permissions";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
+import Icon from "@/components/Icon";
 
 export default function ArticlesPage() {
   const { role } = useCurrentUser();
@@ -200,6 +201,9 @@ export default function ArticlesPage() {
                     >
                       ▶
                     </span>
+                    {category.icon && (
+                      <Icon name={category.icon} size={16} style={{ color: "var(--fg-muted)" }} />
+                    )}
                     {category.name}
                     <span className="badge" style={{ marginLeft: "auto" }}>
                       {category.sections.reduce(
@@ -208,6 +212,11 @@ export default function ArticlesPage() {
                       )}
                     </span>
                   </button>
+                  {category.description && (
+                    <p style={{ fontSize: 12, color: "var(--fg-muted)", margin: "4px 0 0 30px" }}>
+                      {category.description}
+                    </p>
+                  )}
                   {expandedCategories.has(category.slug) && (
                     <div style={{ paddingLeft: 20, marginTop: 4 }}>
                       {category.sections.map((section) => (
