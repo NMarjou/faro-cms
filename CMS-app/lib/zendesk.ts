@@ -24,9 +24,17 @@ import type { ZdCategory, ZdSection } from "./zendesk-reconcile";
  */
 
 export interface ZendeskConfig {
+  /** Account subdomain — where the brands list and auth live. */
   subdomain: string;
   email: string;
   token: string;
+  /**
+   * Host that Help Center calls route to, e.g. "brand-a.zendesk.com". In a
+   * multi-brand account each brand has its own host and its own help centre;
+   * this is what selects WHICH one to read/write. Unset ⇒ the account subdomain
+   * (single-brand fallback). Resolved per project from the map's chosen brand.
+   */
+  brandHost?: string;
 }
 
 /** Read Zendesk credentials from env, or explain exactly what's missing. */
@@ -72,8 +80,41 @@ async function getAll<T>(cfg: ZendeskConfig, firstUrl: string, key: string): Pro
   return out;
 }
 
+/** Help Center base — the BRAND host when set, else the account subdomain. This
+ *  single line is what makes "one project per help-centre brand" real: every
+ *  category/section/article call routes to the project's chosen brand. */
 function base(cfg: ZendeskConfig): string {
-  return `https://${cfg.subdomain}.zendesk.com/api/v2/help_center`;
+  const host = cfg.brandHost || `${cfg.subdomain}.zendesk.com`;
+  return `https://${host}/api/v2/help_center`;
+}
+
+// ── Brands ───────────────────────────────────────────────────────────────────
+
+export interface ZdBrand {
+  id: number;
+  name: string;
+  /** Host to route this brand's Help Center calls to (its own zendesk subdomain,
+   *  or a host-mapped domain). */
+  host: string;
+  active: boolean;
+}
+
+/** Derive a brand's Help Center host. Prefer its brand_url (the canonical URL
+ *  Zendesk returns); fall back to `{subdomain}.zendesk.com`. A host-mapped custom
+ *  domain may not serve the API, so the zendesk host is the safe default. */
+export function hostFromBrand(b: { brand_url?: string; subdomain?: string }): string {
+  if (b.brand_url) {
+    try { return new URL(b.brand_url).host; } catch { /* fall through */ }
+  }
+  return `${b.subdomain ?? ""}.zendesk.com`;
+}
+
+/** List the account's brands (from the ACCOUNT subdomain, not a brand host). */
+export async function listBrands(cfg: ZendeskConfig): Promise<ZdBrand[]> {
+  const rows = await getAll<{ id: number; name: string; brand_url?: string; subdomain?: string; active: boolean }>(
+    cfg, `https://${cfg.subdomain}.zendesk.com/api/v2/brands.json?per_page=100`, "brands"
+  );
+  return rows.map((b) => ({ id: b.id, name: b.name, host: hostFromBrand(b), active: b.active }));
 }
 
 /** Fetch the help centre's categories for a locale. */

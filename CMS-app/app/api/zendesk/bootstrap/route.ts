@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
     const map = await loadZendeskMap();
     const locale = bodyLocale || map.locale || "en-us";
 
-    const cfg = getZendeskConfig();
+    // Route to the project's selected brand host, so we reconcile against the
+    // RIGHT help centre (a multi-brand account has one per brand).
+    const cfg = { ...getZendeskConfig(), brandHost: map.brandHost };
     const [categories, sections] = await Promise.all([
       listCategories(cfg, locale),
       listSections(cfg, locale),
