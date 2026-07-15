@@ -90,6 +90,43 @@ describe("resolveConditionals", () => {
     expect(kept).not.toContain("contenteditable");
   });
 
+  it("KEEPS a video embed inside a kept conditional block (chrome ≠ content)", () => {
+    // Regression: stripConditionalChrome keyed on contenteditable="false" alone,
+    // but VideoEmbed carries it too and compile never resolves it — so any video
+    // inside a conditional block was silently deleted from published output.
+    const video =
+      `<div data-node-type="video" style="position: relative;" contenteditable="false">` +
+        `<iframe src="https://www.youtube.com/embed/abc123" allowfullscreen></iframe>` +
+      `</div>`;
+    const html = conditionalBlock("advanced", `<p>watch this</p>${video}`);
+
+    const kept = resolveConditionals(html, ["advanced"]);
+    expect(kept).toContain("youtube.com/embed/abc123"); // the embed survives
+    expect(kept).toContain('data-node-type="video"');
+    expect(kept).not.toContain("remove-conditional-block"); // but the chip is gone
+    expect(kept).not.toContain("⚡");
+
+    // And it survives the no-audience path too (which also unwraps the chrome).
+    const all = resolveConditionals(html, undefined);
+    expect(all).toContain("youtube.com/embed/abc123");
+    expect(all).not.toContain("⚡");
+  });
+
+  it("strips the label chip even WITHOUT the × control (older content)", () => {
+    // Real content renders the chip as a bare contenteditable div with no remove
+    // button. Keying the strip on `remove-conditional-block` left "⚡ workbench"
+    // visible on the published page.
+    const noRemoveBtn =
+      `<div data-tags="[&quot;workbench&quot;]" data-node-type="conditional" style="position: relative;">` +
+        `<div contenteditable="false" style="position: absolute;">⚡ workbench</div>` +
+        `<div style="margin-top: 4px;"><p>body</p></div>` +
+      `</div>`;
+    const out = resolveConditionals(noRemoveBtn, ["workbench"]);
+    expect(out).toContain("body");
+    expect(out).not.toContain("⚡");
+    expect(out).not.toContain("contenteditable");
+  });
+
   it("STRIPS / KEEPS inline conditional marks by audience", () => {
     const html = `<p>Get a token from${conditionalInline("planner", " the admin panel.")}</p>`;
     expect(resolveConditionals(html, ["advanced"])).not.toContain("the admin panel");
@@ -104,6 +141,27 @@ describe("resolveConditionals", () => {
     expect(resolveConditionals(html, [])).toContain("Custom Claims");
   });
 
+  it("STILL unwraps the markup with no audience — keeping content ≠ leaving markup", () => {
+    // This shipped raw conditional wrappers and the editor's "⚡ advanced ×" chip
+    // into published pages: the no-audience path returned the content untouched.
+    // Invisible while compile output stayed inside the CMS; visible to readers
+    // the moment it's published.
+    for (const audience of [undefined, [] as string[]]) {
+      const out = resolveConditionals(conditionalBlock("advanced", secret), audience);
+      expect(out).toContain("Custom Claims"); // content kept
+      expect(out).not.toContain("data-node-type=\"conditional\""); // wrapper gone
+      expect(out).not.toContain("remove-conditional-block"); // editor chrome gone
+      expect(out).not.toContain("contenteditable");
+    }
+  });
+
+  it("STILL unwraps inline conditional marks with no audience", () => {
+    const html = `<p>Get a token from${conditionalInline("planner", " the admin panel.")}</p>`;
+    const out = resolveConditionals(html, undefined);
+    expect(out).toContain("the admin panel"); // content kept
+    expect(out).not.toContain("data-mark-type"); // wrapper gone
+  });
+
   it("handles several blocks with different tags independently", () => {
     const html =
       conditionalBlock("advanced", "<p>ADV</p>") +
@@ -113,6 +171,30 @@ describe("resolveConditionals", () => {
     expect(out).not.toContain("ADV");
     expect(out).toContain("PASS");
     expect(out).toContain("always");
+  });
+
+  it("resolves NESTED conditional blocks (a gated block inside a gated block)", () => {
+    // Unwrapping the outer block and returning its inner content verbatim left
+    // the INNER wrapper and its editor chrome in the published page.
+    const nested = conditionalBlock("workbench", `<p>outer</p>${conditionalBlock("admin-only", "<p>inner</p>")}`);
+
+    // no audience → keep both, but no markup survives
+    const all = resolveConditionals(nested, undefined);
+    expect(all).toContain("outer");
+    expect(all).toContain("inner");
+    expect(all).not.toContain("data-node-type=\"conditional\"");
+    expect(all).not.toContain("remove-conditional-block");
+
+    // audience matches only the OUTER tag → inner gated block is stripped
+    const outerOnly = resolveConditionals(nested, ["workbench"]);
+    expect(outerOnly).toContain("outer");
+    expect(outerOnly).not.toContain("inner");
+    expect(outerOnly).not.toContain("data-node-type=\"conditional\"");
+
+    // audience matches neither → the whole thing goes
+    const none = resolveConditionals(nested, ["passport"]);
+    expect(none).not.toContain("outer");
+    expect(none).not.toContain("inner");
   });
 
   it("keeps content when tags are unreadable (guard: don't silently delete)", () => {

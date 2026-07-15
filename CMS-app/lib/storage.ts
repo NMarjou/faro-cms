@@ -100,6 +100,25 @@ export async function getFile(path: string, ref?: string): Promise<GitHubFile> {
 }
 
 /**
+ * A file's RAW BYTES, override-aware.
+ *
+ * `getFile` decodes to utf-8, which corrupts binary — so images can't go through
+ * it. The site build needs real bytes to copy assets into the published output
+ * (in the CMS an image is served via `/api/content?path=…&raw=1`, a URL that is
+ * dead on any host that isn't the CMS).
+ */
+export async function getFileBytes(path: string, ref?: string): Promise<Buffer> {
+  const sub = await resolveSubpath(path);
+  if (isLocal) {
+    const fs = await import("fs");
+    const nodePath = await import("path");
+    const root = nodePath.resolve(process.cwd(), "..", "CMS-content");
+    return fs.promises.readFile(nodePath.join(root, sub));
+  }
+  return github.getFileBytesAt(sub, ref);
+}
+
+/**
  * Cached read for slowly-changing files. Bypasses cache when a specific
  * `ref` is requested. Writes via `putFile`/`deleteFile` invalidate.
  */

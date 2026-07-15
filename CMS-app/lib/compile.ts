@@ -135,12 +135,24 @@ function replaceBalanced(
   return out + html.slice(cursor);
 }
 
-/** Drop the editor's conditional-block label chip ("⚡ advanced ×") — it's
- *  authoring chrome and must not reach published output. */
+/**
+ * Drop the editor's conditional-block label chip ("⚡ advanced") — authoring
+ * chrome that must never reach a reader.
+ *
+ * Keyed on the chip's OWN markers — the ⚡ label and/or its
+ * `remove-conditional-block` control — NOT on `contenteditable="false"` alone.
+ * That attribute is not unique to the chip: VideoEmbed (`data-node-type="video"`)
+ * and other atom nodes also carry it, and compile never resolves them, so they
+ * reach this pass intact. Keying on `contenteditable` deleted any video embedded
+ * inside a conditional block — real content, gone silently. The negative
+ * lookahead keeps the marker inside the SAME div, so a content node (no ⚡, no
+ * remove control before its own `</div>`) is never matched. Both chip shapes are
+ * covered: newer content has the × control, older content only the ⚡ label.
+ */
 function stripConditionalChrome(inner: string): string {
   return inner.replace(
-    /<div[^>]*contenteditable="false"[^>]*>[\s\S]*?<\/div>/gi,
-    (block) => (/remove-conditional-block/.test(block) ? "" : block)
+    /<div\b[^>]*contenteditable="false"[^>]*>(?:(?!<\/div>)[\s\S])*?(?:remove-conditional-block|⚡)[\s\S]*?<\/div>/gi,
+    ""
   );
 }
 
@@ -152,19 +164,28 @@ export function resolveConditionals(
   content: string,
   activeTags: string[] | undefined
 ): string {
-  if (!activeTags || activeTags.length === 0) return content;
+  // "Keep all the content" and "leave the markup alone" are DIFFERENT things.
+  // This used to return `content` untouched when no audience was selected, which
+  // was invisible while compile output stayed inside the CMS — but published
+  // pages then carried the raw conditional wrappers AND the editor's label chip
+  // ("⚡ advanced ×") straight to the reader. The wrappers are always unwrapped;
+  // only the keep/strip DECISION depends on activeTags.
+  const keepAll = !activeTags || activeTags.length === 0;
 
   // Unreadable tags → keep the content. Failing open risks over-publishing, but
   // failing closed would silently delete authored content; parseTags now handles
   // the real markup, so this is a guard rather than a routine path.
-  const keepBlock = (tags: string[] | null, inner: string) => {
-    if (!tags) return stripConditionalChrome(inner);
-    return tags.some((t) => activeTags.includes(t)) ? stripConditionalChrome(inner) : "";
-  };
-  const keepInline = (tags: string[] | null, inner: string) => {
-    if (!tags) return inner;
-    return tags.some((t) => activeTags.includes(t)) ? inner : "";
-  };
+  const kept = (tags: string[] | null) =>
+    keepAll || !tags || tags.some((t) => activeTags!.includes(t));
+
+  // Conditionals NEST (a gated block inside another gated block). Unwrapping the
+  // outer one and returning its inner content verbatim left the inner wrapper —
+  // and its editor chrome — in the output. Recurse: `inner` is strictly smaller
+  // than `content`, so this terminates.
+  const keepBlock = (tags: string[] | null, inner: string) =>
+    kept(tags) ? resolveConditionals(stripConditionalChrome(inner), activeTags) : "";
+  const keepInline = (tags: string[] | null, inner: string) =>
+    kept(tags) ? resolveConditionals(inner, activeTags) : "";
 
   let out = replaceBalanced(
     content, "div", /<div\b[^>]*data-node-type="conditional"[^>]*>/gi, keepBlock
