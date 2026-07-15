@@ -48,6 +48,13 @@ describe("rewriteAssetUrls", () => {
     expect(assets).toEqual(["images/icons/test-circle.svg"]);
   });
 
+  it("refuses a path-traversal asset instead of copying it out of the content root", () => {
+    const evil = `<img src="/api/content?path=..%2F..%2F..%2Fetc%2Fpasswd&amp;raw=1">`;
+    const { html, assets } = rewriteAssetUrls(evil);
+    expect(assets).toEqual([]);          // nothing collected to copy
+    expect(html).toBe(evil);             // src left untouched, not rewritten
+  });
+
   it("leaves external and already-static images alone", () => {
     const html = `<img src="https://cdn.example.com/a.png"><img src="/images/b.png">`;
     const out = rewriteAssetUrls(html);
@@ -75,6 +82,12 @@ describe("rewriteInternalLinks", () => {
   it("REPORTS an unresolvable slug instead of leaving a silent dead link", () => {
     const { broken } = rewriteInternalLinks(`<a href="ghost-article">x</a>`, resolve);
     expect(broken).toEqual(["ghost-article"]);
+  });
+
+  it("preserves the #fragment on a resolved link (deep links must not reset to top)", () => {
+    const real = `<a href="managing-goals#step-2">Goals</a>`;
+    const { html } = rewriteInternalLinks(real, resolve);
+    expect(html).toContain('href="/help/passport/managing-goals.html#step-2"');
   });
 
   it("never touches external, rooted, anchor or mailto links", () => {

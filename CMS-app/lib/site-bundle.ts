@@ -74,6 +74,10 @@ export function rewriteAssetUrls(
     const params = new URLSearchParams(String(query).replace(/&amp;/g, "&"));
     const path = params.get("path"); // URLSearchParams decodes %2F → /
     if (!path) return match;
+    // The path comes from author-authored markup and flows into a filesystem
+    // read (getFileBytes) and a zip entry name. A `..` segment would escape the
+    // content root; refuse it — leave the src untouched so nothing is copied.
+    if (path.split("/").some((seg) => seg === "..") || path.startsWith("/")) return match;
     assets.add(path);
     return `src="${toUrl(path)}"`;
   });
@@ -92,9 +96,15 @@ export function rewriteInternalLinks(
   const broken: string[] = [];
   const out = html.replace(/href="([^"]+)"/g, (match, href: string) => {
     if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(href)) return match; // external / rooted / anchor
-    const target = resolve(href.replace(/^\.\//, ""));
+    // Split off any ?query/#fragment BEFORE resolving, then re-append it: the
+    // resolver matches on the bare path, and dropping "#step-2" would land a deep
+    // link at the top of the page instead of the target section.
+    const cut = href.search(/[?#]/);
+    const suffix = cut >= 0 ? href.slice(cut) : "";
+    const bare = (cut >= 0 ? href.slice(0, cut) : href).replace(/^\.\//, "");
+    const target = resolve(bare);
     if (!target) { broken.push(href); return match; }
-    return `href="${target}"`;
+    return `href="${target}${suffix}"`;
   });
   return { html: out, broken };
 }

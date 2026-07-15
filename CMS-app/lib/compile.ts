@@ -139,15 +139,21 @@ function replaceBalanced(
  * Drop the editor's conditional-block label chip ("⚡ advanced") — authoring
  * chrome that must never reach a reader.
  *
- * Keyed on `contenteditable="false"`, not on the chip's × control: older content
- * renders the chip WITHOUT the remove button, so keying on that marker left the
- * chip in the published page. `contenteditable` is an editor-only attribute, and
- * by the time conditionals are resolved the other nodes that carry it (variables,
- * snippets) have already been replaced — so inside a conditional block, a
- * contenteditable div is always the chip.
+ * Keyed on the chip's OWN markers — the ⚡ label and/or its
+ * `remove-conditional-block` control — NOT on `contenteditable="false"` alone.
+ * That attribute is not unique to the chip: VideoEmbed (`data-node-type="video"`)
+ * and other atom nodes also carry it, and compile never resolves them, so they
+ * reach this pass intact. Keying on `contenteditable` deleted any video embedded
+ * inside a conditional block — real content, gone silently. The negative
+ * lookahead keeps the marker inside the SAME div, so a content node (no ⚡, no
+ * remove control before its own `</div>`) is never matched. Both chip shapes are
+ * covered: newer content has the × control, older content only the ⚡ label.
  */
 function stripConditionalChrome(inner: string): string {
-  return inner.replace(/<div[^>]*contenteditable="false"[^>]*>[\s\S]*?<\/div>/gi, "");
+  return inner.replace(
+    /<div\b[^>]*contenteditable="false"[^>]*>(?:(?!<\/div>)[\s\S])*?(?:remove-conditional-block|⚡)[\s\S]*?<\/div>/gi,
+    ""
+  );
 }
 
 /**

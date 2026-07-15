@@ -90,6 +90,28 @@ describe("resolveConditionals", () => {
     expect(kept).not.toContain("contenteditable");
   });
 
+  it("KEEPS a video embed inside a kept conditional block (chrome ≠ content)", () => {
+    // Regression: stripConditionalChrome keyed on contenteditable="false" alone,
+    // but VideoEmbed carries it too and compile never resolves it — so any video
+    // inside a conditional block was silently deleted from published output.
+    const video =
+      `<div data-node-type="video" style="position: relative;" contenteditable="false">` +
+        `<iframe src="https://www.youtube.com/embed/abc123" allowfullscreen></iframe>` +
+      `</div>`;
+    const html = conditionalBlock("advanced", `<p>watch this</p>${video}`);
+
+    const kept = resolveConditionals(html, ["advanced"]);
+    expect(kept).toContain("youtube.com/embed/abc123"); // the embed survives
+    expect(kept).toContain('data-node-type="video"');
+    expect(kept).not.toContain("remove-conditional-block"); // but the chip is gone
+    expect(kept).not.toContain("⚡");
+
+    // And it survives the no-audience path too (which also unwraps the chrome).
+    const all = resolveConditionals(html, undefined);
+    expect(all).toContain("youtube.com/embed/abc123");
+    expect(all).not.toContain("⚡");
+  });
+
   it("strips the label chip even WITHOUT the × control (older content)", () => {
     // Real content renders the chip as a bare contenteditable div with no remove
     // button. Keying the strip on `remove-conditional-block` left "⚡ workbench"
