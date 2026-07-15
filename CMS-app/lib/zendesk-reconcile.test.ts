@@ -150,6 +150,41 @@ describe("reconcile — sections", () => {
     expect(plan.nodes[0].children[0].children[0].status).toBe("create");
   });
 
+  it("does NOT mislink a subsection to a top-level section when its parent section is unresolved", () => {
+    // Regression: null was used for both "top level" and "parent unresolved", so
+    // a subsection under a to-be-CREATED section matched an unrelated TOP-LEVEL
+    // Zendesk section — a mislink the module exists to prevent.
+    const map: ZendeskMap = { ...emptyMap(), categories: { help: 500 } };
+    const plan = reconcile(
+      toc([cat("help", "Help", [sec("passport", "Passport", [sec("setup", "Setup")])])]),
+      {
+        categories: [zcat(500, "Help")],
+        // "Passport" is NOT in Zendesk (→ create); an unrelated TOP-LEVEL "Setup"
+        // exists in the same category.
+        sections: [zsec(800, "Setup", 500, null)],
+      },
+      map
+    );
+    const passport = plan.nodes[0].children[0];
+    expect(passport.status).toBe("create");
+    const setup = passport.children[0];
+    expect(setup.status).toBe("create"); // must NOT link to 800
+    expect(setup.zendeskId).toBeUndefined();
+  });
+
+  it("forces CREATE on a subsection whose parent section is stale (mapped id gone)", () => {
+    // A stale parent's id no longer exists in Zendesk, so its children can't be
+    // nested under it — they must be created, not matched by name.
+    const map: ZendeskMap = { ...emptyMap(), categories: { help: 500 }, sections: { "help/passport": 999 } };
+    const plan = reconcile(
+      toc([cat("help", "Help", [sec("passport", "Passport", [sec("setup", "Setup")])])]),
+      { categories: [zcat(500, "Help")], sections: [zsec(800, "Setup", 500, null)] },
+      map
+    );
+    expect(plan.nodes[0].children[0].status).toBe("stale");
+    expect(plan.nodes[0].children[0].children[0].status).toBe("create");
+  });
+
   it("reports an unmatched section in a matched category as an orphan", () => {
     const map: ZendeskMap = { ...emptyMap(), categories: { help: 500 } };
     const plan = reconcile(
@@ -158,6 +193,18 @@ describe("reconcile — sections", () => {
       map
     );
     expect(plan.orphans.sections).toEqual([{ id: 701, name: "Legacy", category_id: 500 }]);
+  });
+
+  it("does NOT report an ambiguous node's candidates as orphans", () => {
+    // The user is choosing among them — reporting them as "in Zendesk, not in
+    // Faro, never deleted" would be misleading.
+    const plan = reconcile(
+      toc([cat("help", "Help")]),
+      { categories: [zcat(500, "Help"), zcat(501, "Help")], sections: [] },
+      emptyMap()
+    );
+    expect(plan.nodes[0].status).toBe("ambiguous");
+    expect(plan.orphans.categories).toEqual([]); // neither candidate is an orphan
   });
 
   it("does not double-report sections whose category is already an orphan", () => {

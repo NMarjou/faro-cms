@@ -69,6 +69,12 @@ function collectConfirmable(
   return { categories, sections };
 }
 
+/** True if any Zendesk id is claimed by more than one Faro key. */
+function hasDuplicateValue(mapping: Record<string, number>): boolean {
+  const ids = Object.values(mapping);
+  return new Set(ids).size !== ids.length;
+}
+
 export default function ZendeskPage() {
   const { role, loaded } = useCurrentUser();
   const [result, setResult] = useState<BootstrapResult | null>(null);
@@ -102,6 +108,10 @@ export default function ZendeskPage() {
   const confirmable = result ? collectConfirmable(result.plan.nodes, picks) : { categories: {}, sections: {} };
   const confirmCount = Object.keys(confirmable.categories).length + Object.keys(confirmable.sections).length;
   const unresolved = result ? result.plan.summary.ambiguous - Object.keys(picks).filter((k) => picks[k]).length : 0;
+  // Two Faro nodes pointing at one Zendesk object would make the sync overwrite
+  // one with the other. The server refuses it too, but catch it here so the user
+  // sees it before submitting rather than as an error after.
+  const hasCollision = hasDuplicateValue(confirmable.categories) || hasDuplicateValue(confirmable.sections);
 
   const confirmMatches = async () => {
     if (!result) return;
@@ -205,12 +215,17 @@ export default function ZendeskPage() {
             )}
 
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button className="btn btn-primary" disabled={confirming || confirmCount === 0 || unresolved > 0} onClick={confirmMatches}>
+              <button className="btn btn-primary" disabled={confirming || confirmCount === 0 || unresolved > 0 || hasCollision} onClick={confirmMatches}>
                 {confirming ? "Confirming…" : `Confirm ${confirmCount} match${confirmCount !== 1 ? "es" : ""}`}
               </button>
               {unresolved > 0 && (
                 <span style={{ fontSize: 13, color: "var(--warning)" }}>
                   Resolve {unresolved} ambiguous match{unresolved !== 1 ? "es" : ""} first.
+                </span>
+              )}
+              {hasCollision && (
+                <span style={{ fontSize: 13, color: "var(--danger)" }}>
+                  Two items point at the same Zendesk object — pick different ones.
                 </span>
               )}
               {s.create > 0 && (

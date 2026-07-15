@@ -18,6 +18,18 @@ import { loadZendeskMap, saveZendeskMap } from "@/lib/zendesk-map";
  * We never touch the `articles` bucket here: that's the sync's to own.
  */
 
+/** First Zendesk id claimed by more than one Faro key, or null. Ids are unique
+ *  per object type, so categories and sections are checked separately. */
+function firstDuplicate(mapping: Record<string, number>): { id: number; keys: string[] } | null {
+  const byId = new Map<number, string[]>();
+  for (const [key, id] of Object.entries(mapping)) {
+    const keys = byId.get(id) ?? byId.set(id, []).get(id)!;
+    keys.push(key);
+    if (keys.length > 1) return { id, keys };
+  }
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   await setRequestProject(request);
   const user = await getRequestUser(request);
@@ -49,6 +61,18 @@ export async function PUT(request: NextRequest) {
     }
     for (const [path, id] of Object.entries(body.sections ?? {})) {
       if (Number.isInteger(id) && id > 0) map.sections[path] = id;
+    }
+
+    // reconcile() guarantees auto-matched ids are unique, but the ambiguous →
+    // user-pick path bypasses that: a person can pick the same Zendesk object for
+    // two Faro nodes. One Zendesk object driven by two sources = the sync
+    // overwrites one with the other. Refuse rather than persist the collision.
+    const dup = firstDuplicate(map.categories) ?? firstDuplicate(map.sections);
+    if (dup) {
+      return NextResponse.json(
+        { error: `Two items are mapped to the same Zendesk id #${dup.id} (${dup.keys.join(", ")}). Each Zendesk object can back only one Faro item.` },
+        { status: 409, headers: NO_STORE }
+      );
     }
 
     await saveZendeskMap(map, "Confirm Zendesk matches");

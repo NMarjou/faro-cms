@@ -116,7 +116,11 @@ export function reconcile(
     path: string,
     name: string,
     parentCatId: number | undefined,
-    parentSectionId: number | null
+    // null = this section sits directly under the category (genuine top level);
+    // a number = its parent section's resolved id; undefined = the parent didn't
+    // resolve. Conflating "unresolved" with "top level" (both as null) would let
+    // a subsection match an UNRELATED top-level Zendesk section — a mislink.
+    parentSectionId: number | null | undefined
   ): Pick<ReconcileNode, "status" | "zendeskId" | "candidates"> => {
     const mapped = map.sections[path];
     if (mapped !== undefined) {
@@ -124,10 +128,10 @@ export function reconcile(
         ? { status: "linked", zendeskId: mapped }
         : { status: "stale", zendeskId: mapped };
     }
-    // A section can only be matched inside a KNOWN Zendesk category, at the right
-    // nesting level. If the parent category isn't resolved yet (create/ambiguous/
-    // stale), the section can't be matched — it'll be created once its parent is.
-    if (parentCatId === undefined) return { status: "create" };
+    // A section can only be matched inside a KNOWN Zendesk container. If the
+    // parent category OR the parent section didn't resolve, the section can't be
+    // matched — it'll be created once its parent exists.
+    if (parentCatId === undefined || parentSectionId === undefined) return { status: "create" };
     const siblings = existing.sections.filter(
       (s) =>
         s.category_id === parentCatId &&
@@ -143,16 +147,22 @@ export function reconcile(
     return { status: "create" };
   };
 
+  // The id to hand a node's children as their parent container. ONLY a node that
+  // resolved to a REAL existing Zendesk object (linked/matched) can parent a
+  // match; create/ambiguous have no id yet, and stale's id is gone from Zendesk —
+  // all three must force their children to "create" (→ undefined).
+  const containerId = (d: Pick<ReconcileNode, "status" | "zendeskId">): number | undefined =>
+    d.status === "linked" || d.status === "matched" ? d.zendeskId : undefined;
+
   const walkSection = (
     sec: TocSection,
     trailKeys: string[],
     parentCatId: number | undefined,
-    parentSectionId: number | null
+    parentSectionId: number | null | undefined
   ): ReconcileNode => {
     const path = [...trailKeys, sec.slug].join("/");
     const decision = decideSection(path, sec.name, parentCatId, parentSectionId);
     summary[decision.status]++;
-    const zdId = decision.zendeskId ?? null;
     return {
       kind: "section",
       faroKey: path,
@@ -160,7 +170,7 @@ export function reconcile(
       ...decision,
       children: (sec.subsections ?? []).map((sub) =>
         // Subsections resolve within the SAME category, nested under this section.
-        walkSection(sub, [...trailKeys, sec.slug], parentCatId, zdId)
+        walkSection(sub, [...trailKeys, sec.slug], parentCatId, containerId(decision))
       ),
     };
   };
@@ -168,22 +178,41 @@ export function reconcile(
   const nodes: ReconcileNode[] = (toc.categories ?? []).map((cat) => {
     const decision = decideCategory(cat.slug, cat.name);
     summary[decision.status]++;
-    const catId = decision.zendeskId; // undefined for create/ambiguous → sections create
     return {
       kind: "category" as const,
       faroKey: cat.slug,
       name: cat.name,
       ...decision,
-      children: (cat.sections ?? []).map((sec) => walkSection(sec, [cat.slug], catId, null)),
+      // null (not undefined) for top-level sections: they sit directly under the
+      // category, which is a resolved container exactly when containerId is set.
+      children: (cat.sections ?? []).map((sec) =>
+        walkSection(sec, [cat.slug], containerId(decision), null)
+      ),
     };
   });
 
-  // Orphans: Zendesk objects no Faro node claimed. Reported, never deleted — a
-  // sync that deletes is a sync you can't safely run twice.
-  const orphanCats = existing.categories.filter((c) => !claimedCats.has(c.id));
+  // A node the user is still choosing among (ambiguous) points at real Zendesk
+  // objects that are NOT orphans — one of them is about to be linked. Reporting
+  // them as "in Zendesk, not in Faro — never deleted" would be misleading.
+  const ambiguousCatIds = new Set<number>();
+  const ambiguousSectionIds = new Set<number>();
+  const collectAmbiguous = (n: ReconcileNode) => {
+    if (n.status === "ambiguous" && n.candidates) {
+      const target = n.kind === "category" ? ambiguousCatIds : ambiguousSectionIds;
+      n.candidates.forEach((c) => target.add(c.id));
+    }
+    n.children.forEach(collectAmbiguous);
+  };
+  nodes.forEach(collectAmbiguous);
+
+  // Orphans: Zendesk objects no Faro node claimed or is choosing among. Reported,
+  // never deleted — a sync that deletes is a sync you can't safely run twice.
+  const orphanCats = existing.categories.filter(
+    (c) => !claimedCats.has(c.id) && !ambiguousCatIds.has(c.id)
+  );
   const orphanCatIds = new Set(orphanCats.map((c) => c.id));
   const orphanSections = existing.sections.filter(
-    (s) => !claimedSections.has(s.id) && !orphanCatIds.has(s.category_id)
+    (s) => !claimedSections.has(s.id) && !ambiguousSectionIds.has(s.id) && !orphanCatIds.has(s.category_id)
   );
 
   return {
