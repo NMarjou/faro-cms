@@ -172,16 +172,23 @@ export async function createArticle(
   return { id: data.article.id, url: data.article.html_url };
 }
 
-/** Update an existing article's translation and keep it published. */
+/**
+ * Update an article: publish the translation, and reparent it to `sectionId`.
+ *
+ * The article-level PUT carries `section_id` so a re-filed article actually
+ * MOVES in Zendesk (sending it every time is idempotent — it just sets the
+ * current section). Publishing lives on the translation PUT (`draft:false`);
+ * the article-level `draft` is derived, not directly settable, so it's not sent.
+ */
 export async function updateArticle(
-  cfg: ZendeskConfig, locale: string, articleId: number, input: { title: string; body: string }
+  cfg: ZendeskConfig, locale: string, articleId: number, sectionId: number, input: { title: string; body: string }
 ): Promise<{ id: number; url: string }> {
   await sendJson<unknown>(
     cfg, "PUT", `${base(cfg)}/articles/${articleId}/translations/${locale}.json`,
     { translation: { title: input.title, body: input.body, draft: false } }
   );
   const data = await sendJson<{ article: { id: number; html_url: string } }>(
-    cfg, "PUT", `${base(cfg)}/articles/${articleId}.json`, { article: { draft: false } }
+    cfg, "PUT", `${base(cfg)}/articles/${articleId}.json`, { article: { section_id: sectionId } }
   );
   return { id: data.article.id, url: data.article.html_url };
 }

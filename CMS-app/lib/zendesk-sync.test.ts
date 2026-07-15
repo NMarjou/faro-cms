@@ -37,14 +37,14 @@ function mockWriter() {
     createCategory: [] as string[],
     createSection: [] as { name: string; categoryId: number; parentSectionId: number | null }[],
     createArticle: [] as { sectionId: number; title: string; body: string }[],
-    updateArticle: [] as { id: number; title: string; body: string }[],
+    updateArticle: [] as { id: number; sectionId: number; title: string; body: string }[],
     uploadAttachment: [] as string[],
   };
   const writer: ZendeskWriter = {
     async createCategory(name) { calls.createCategory.push(name); return ++cat; },
     async createSection(name, categoryId, parentSectionId) { calls.createSection.push({ name, categoryId, parentSectionId }); return ++sec; },
     async createArticle(sectionId, a) { calls.createArticle.push({ sectionId, ...a }); const id = ++art; return { id, url: `https://z/hc/articles/${id}` }; },
-    async updateArticle(id, a) { calls.updateArticle.push({ id, ...a }); return { id, url: `https://z/hc/articles/${id}` }; },
+    async updateArticle(id, sectionId, a) { calls.updateArticle.push({ id, sectionId, ...a }); return { id, url: `https://z/hc/articles/${id}` }; },
     async uploadAttachment(fileName) { calls.uploadAttachment.push(fileName); return { contentUrl: `https://z/attachments/${fileName}` }; },
   };
   return { writer, calls };
@@ -65,7 +65,7 @@ const art = (over: Partial<SyncArticle> = {}): SyncArticle => ({
   sectionPath: "help/passport",
   body: "<p>hello</p>",
   assets: [],
-  hash: hashArticle("Getting Started", "<p>hello</p>"),
+  hash: hashArticle("Getting Started", "<p>hello</p>", "help/passport"),
   ...over,
 });
 
@@ -76,13 +76,13 @@ describe("buildSyncPlan", () => {
     const map: ZendeskMap = {
       ...emptyMap(),
       categories: { help: 500 }, sections: { "help/passport": 700 },
-      articles: { "help/passport/a.html": { id: 10, hash: "OLD" }, "help/passport/b.html": { id: 11, hash: hashArticle("B", "<p>b</p>") } },
+      articles: { "help/passport/a.html": { id: 10, hash: "OLD" }, "help/passport/b.html": { id: 11, hash: hashArticle("B", "<p>b</p>", "help/passport") } },
     };
     const p = plan([catNode("help", "Help", "linked", [secNode("help/passport", "Passport", "linked", [], 700)], 500)]);
     const articles = [
       { file: "help/passport/new.html", title: "New", sectionPath: "help/passport", hash: "H1" },
       { file: "help/passport/a.html", title: "A", sectionPath: "help/passport", hash: "H2" }, // hash differs → update
-      { file: "help/passport/b.html", title: "B", sectionPath: "help/passport", hash: hashArticle("B", "<p>b</p>") }, // same → skip
+      { file: "help/passport/b.html", title: "B", sectionPath: "help/passport", hash: hashArticle("B", "<p>b</p>", "help/passport") }, // same → skip
     ];
     const sp = buildSyncPlan(p, map, articles, []);
     expect(sp.summary.articlesCreate).toBe(1);
@@ -159,7 +159,7 @@ describe("executeSync", () => {
   it("skips an unchanged article — no create, no update, no upload", async () => {
     const { writer, calls } = mockWriter();
     const persisted: ZendeskMap[] = [];
-    const h = hashArticle("Intro", "<p>i</p>");
+    const h = hashArticle("Intro", "<p>i</p>", "help/p");
     const map: ZendeskMap = { ...emptyMap(), categories: { help: 500 }, sections: { "help/p": 700 }, articles: { "help/p/i.html": { id: 9, hash: h } } };
     const p = plan([catNode("help", "Help", "linked", [secNode("help/p", "P", "linked", [], 700)], 500)]);
     const report = await executeSync({
@@ -185,6 +185,33 @@ describe("executeSync", () => {
     expect(report.articlesUpdated).toBe(1);
     expect(calls.updateArticle[0].id).toBe(42);
     expect(map.articles["help/p/i.html"].hash).toBe("NEW");
+  });
+
+  it("treats a MOVED article as changed and reparents it (hash includes section)", async () => {
+    // Regression: hashArticle omitted the section path, so re-filing an article
+    // with unchanged content left the hash equal → skipped, and the article
+    // stayed in its old Zendesk section forever.
+    const { writer, calls } = mockWriter();
+    const oldHash = hashArticle("Intro", "<p>i</p>", "help/old");
+    const newHash = hashArticle("Intro", "<p>i</p>", "help/new"); // same content, new section
+    expect(newHash).not.toBe(oldHash); // the move alone must change the hash
+    const map: ZendeskMap = {
+      ...emptyMap(),
+      categories: { help: 500 }, sections: { "help/old": 700, "help/new": 701 },
+      articles: { "help/i.html": { id: 55, hash: oldHash } },
+    };
+    const p = plan([catNode("help", "Help", "linked", [
+      secNode("help/old", "Old", "linked", [], 700),
+      secNode("help/new", "New", "linked", [], 701),
+    ], 500)]);
+    const report = await executeSync({
+      plan: p, map,
+      articles: [art({ file: "help/i.html", title: "Intro", sectionPath: "help/new", body: "<p>i</p>", hash: newHash })],
+      deps: deps(writer, []),
+    });
+    expect(report.articlesUpdated).toBe(1); // not skipped
+    expect(calls.updateArticle[0].id).toBe(55);
+    expect(calls.updateArticle[0].sectionId).toBe(701); // reparented to the new section
   });
 
   it("uploads referenced images and rewrites the body to their content_url", async () => {

@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         const file = await getFile(`content/${a.file}`);
         const { html } = await compileArticle(file.content, undefined, cache, tags);
         const { assets } = rewriteAssetUrls(html);
-        articles.push({ ...a, body: html, assets, hash: hashArticle(a.title, html) });
+        articles.push({ ...a, body: html, assets, hash: hashArticle(a.title, html, a.sectionPath) });
       } catch {
         // Unreadable body — leave it out; it surfaces as blocked (no op planned).
       }
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       createCategory: (name, description) => createCategory(cfg, locale, { name, description }),
       createSection: (name, categoryId, parentSectionId) => createSection(cfg, locale, { name, categoryId, parentSectionId }),
       createArticle: (sectionId, a) => createArticle(cfg, locale, sectionId, a),
-      updateArticle: (id, a) => updateArticle(cfg, locale, id, a),
+      updateArticle: (id, sectionId, a) => updateArticle(cfg, locale, id, sectionId, a),
       uploadAttachment: (fileName, bytes, contentType) => uploadAttachment(cfg, fileName, bytes, contentType),
     };
 
