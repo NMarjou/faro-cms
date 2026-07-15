@@ -44,6 +44,23 @@ interface BootstrapResult {
   plan: ReconcilePlan;
 }
 
+interface SyncPlan {
+  ready: boolean;
+  unconfirmed: { key: string; name: string; status: string }[];
+  blocked: { file: string; reason: string }[];
+  summary: {
+    categoriesCreate: number; sectionsCreate: number;
+    articlesCreate: number; articlesUpdate: number; articlesSkip: number; blocked: number;
+  };
+}
+interface SyncReport {
+  categoriesCreated: number; sectionsCreated: number;
+  articlesCreated: number; articlesUpdated: number; articlesSkipped: number;
+  imagesUploaded: number;
+  failures: { key: string; error: string }[];
+  internalLinks: { file: string; count: number }[];
+}
+
 const STATUS_META: Record<MatchStatus, { label: string; bg: string; fg: string; hint: string }> = {
   linked: { label: "Linked", bg: "var(--info-light, #eff6ff)", fg: "var(--info, #2563eb)", hint: "Already mapped — will update in place." },
   matched: { label: "Match", bg: "var(--success-light, #f0fdf4)", fg: "var(--success, #15803d)", hint: "One same-named Zendesk object — confirm to link." },
@@ -83,6 +100,11 @@ export default function ZendeskPage() {
   const [picks, setPicks] = useState<Record<string, number>>({});
   const [confirming, setConfirming] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
+  const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
+  const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [confirmingSync, setConfirmingSync] = useState(false);
 
   const runBootstrap = async () => {
     setLoading(true);
@@ -135,6 +157,48 @@ export default function ZendeskPage() {
       setError(err instanceof Error ? err.message : "Failed to confirm");
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const previewSync = async () => {
+    setSyncBusy(true);
+    setSyncError(null);
+    setSyncReport(null);
+    setConfirmingSync(false);
+    try {
+      const res = await fetch("/api/zendesk/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Preview failed");
+      setSyncPlan(data.plan as SyncPlan);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const runSync = async () => {
+    setSyncBusy(true);
+    setSyncError(null);
+    setConfirmingSync(false);
+    try {
+      const res = await fetch("/api/zendesk/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: false }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      setSyncReport(data.report as SyncReport);
+      setSyncPlan(null);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncBusy(false);
     }
   };
 
@@ -236,6 +300,91 @@ export default function ZendeskPage() {
             </div>
           </>
         )}
+
+        {/* ── Publish to Zendesk ── plans from the confirmed map, so it works
+            without re-running the check above. Preview is safe (no Zendesk
+            call); Sync publishes live. */}
+        <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>Publish to Zendesk</h2>
+          <p style={{ color: "var(--fg-muted)", fontSize: 13, margin: "0 0 12px", maxWidth: 640 }}>
+            Creates any missing categories and sections, then publishes every article <strong>live</strong>.
+            Unchanged articles are skipped. Preview first — it computes the plan from your confirmed
+            matches without touching Zendesk.
+          </p>
+
+          {syncError && (
+            <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 12, fontSize: 14 }}>
+              {syncError}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <button className="btn" disabled={syncBusy} onClick={previewSync}>
+              {syncBusy ? "Working…" : "Preview sync"}
+            </button>
+            {!confirmingSync ? (
+              <button className="btn btn-primary" disabled={syncBusy} onClick={() => { setConfirmingSync(true); setSyncError(null); }}>
+                Sync &amp; publish live
+              </button>
+            ) : (
+              <>
+                <span style={{ fontSize: 13, color: "var(--danger)" }}>Publish live to customers?</span>
+                <button className="btn btn-primary" disabled={syncBusy} onClick={runSync}>
+                  {syncBusy ? "Syncing…" : "Yes, publish"}
+                </button>
+                <button className="btn" disabled={syncBusy} onClick={() => setConfirmingSync(false)}>Cancel</button>
+              </>
+            )}
+          </div>
+
+          {syncPlan && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 14, fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Dry run — what the sync would do</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: "var(--fg-muted)" }}>
+                <li>{syncPlan.summary.categoriesCreate} categories, {syncPlan.summary.sectionsCreate} sections created</li>
+                <li>
+                  {syncPlan.summary.articlesCreate} articles published new,{" "}
+                  {syncPlan.summary.articlesUpdate} updated, {syncPlan.summary.articlesSkip} unchanged (skipped)
+                </li>
+              </ul>
+              {!syncPlan.ready && (
+                <div style={{ marginTop: 8, color: "var(--warning)" }}>
+                  {syncPlan.unconfirmed.length} unconfirmed match{syncPlan.unconfirmed.length !== 1 ? "es" : ""} — confirm above before a live sync.
+                </div>
+              )}
+              {syncPlan.blocked.length > 0 && (
+                <div style={{ marginTop: 8, color: "var(--warning)" }}>
+                  {syncPlan.blocked.length} article{syncPlan.blocked.length !== 1 ? "s" : ""} can’t publish (no Zendesk home):{" "}
+                  {syncPlan.blocked.slice(0, 5).map((b) => b.file).join(", ")}
+                </div>
+              )}
+            </div>
+          )}
+
+          {syncReport && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 14, fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--success, var(--info))" }}>Sync complete</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: "var(--fg-muted)" }}>
+                <li>{syncReport.categoriesCreated} categories, {syncReport.sectionsCreated} sections created</li>
+                <li>
+                  {syncReport.articlesCreated} published, {syncReport.articlesUpdated} updated,{" "}
+                  {syncReport.articlesSkipped} unchanged · {syncReport.imagesUploaded} images uploaded
+                </li>
+              </ul>
+              {syncReport.internalLinks.length > 0 && (
+                <div style={{ marginTop: 8, color: "var(--warning)" }}>
+                  {syncReport.internalLinks.length} article{syncReport.internalLinks.length !== 1 ? "s" : ""} contain internal cross-links not yet rewritten to Zendesk URLs.
+                </div>
+              )}
+              {syncReport.failures.length > 0 && (
+                <div style={{ marginTop: 8, color: "var(--danger)" }}>
+                  {syncReport.failures.length} item{syncReport.failures.length !== 1 ? "s" : ""} failed:{" "}
+                  {syncReport.failures.slice(0, 5).map((f) => `${f.key} (${f.error})`).join("; ")}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

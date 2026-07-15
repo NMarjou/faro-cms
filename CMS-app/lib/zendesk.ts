@@ -3,16 +3,24 @@ import type { ZdCategory, ZdSection } from "./zendesk-reconcile";
 /**
  * Thin Zendesk Help Center REST client.
  *
- * Read-only for now — the bootstrap step needs to SEE a help centre's existing
- * categories and sections before anything is matched or written. The create/
- * update calls (which mutate a customer's live help centre) land in the next
- * slice, deliberately gated behind the reviewed reconcile.
+ * Reads (listCategories/listSections) power the read-only bootstrap. Writes
+ * (create category/section/article, upload attachment) power the outbound sync —
+ * they mutate a customer's LIVE help centre, so they only run behind the
+ * reviewed reconcile + confirm flow (see lib/zendesk-sync.ts) and the
+ * canPublish permission gate.
  *
  * Config is per-deployment env, mirroring lib/github.ts:
- *   ZENDESK_SUBDOMAIN   e.g. "beqom"  → beqom.zendesk.com
- *   ZENDESK_EMAIL       an agent email
- *   ZENDESK_API_TOKEN   an API token (Admin → Apps and integrations → APIs)
+ *   ZENDESK_SUBDOMAIN            e.g. "beqom"  → beqom.zendesk.com
+ *   ZENDESK_EMAIL               an agent email
+ *   ZENDESK_API_TOKEN           an API token (Admin → Apps and integrations → APIs)
+ *   ZENDESK_PERMISSION_GROUP_ID required to CREATE articles (Guide managed perms)
  * Auth is HTTP Basic as `{email}/token:{api_token}` (Zendesk's token scheme).
+ *
+ * NOTE: the write calls below are implemented to the documented Help Center API
+ * but have NOT been run against a live tenant (that needs a token). The sync
+ * orchestration that drives them (lib/zendesk-sync.ts) is exercised with a mock
+ * client, so its logic — ordering, id-write-back, hash-skip — is covered; the
+ * wire format of these individual calls is the part a live run must confirm.
  */
 
 export interface ZendeskConfig {
@@ -85,4 +93,126 @@ export async function listSections(cfg: ZendeskConfig, locale: string): Promise<
   return rows.map((s) => ({
     id: s.id, name: s.name, category_id: s.category_id, parent_section_id: s.parent_section_id ?? null,
   }));
+}
+
+// ── Writes ─────────────────────────────────────────────────────────────────
+
+/** POST/PUT JSON and return the parsed body, surfacing Zendesk's error text. */
+async function sendJson<T>(
+  cfg: ZendeskConfig, method: "POST" | "PUT", url: string, body: unknown
+): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: authHeader(cfg), "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Zendesk ${res.status} on ${method} ${url}: ${text.slice(0, 300)}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** Create a category. Returns its new id. */
+export async function createCategory(
+  cfg: ZendeskConfig, locale: string, input: { name: string; description?: string }
+): Promise<number> {
+  const data = await sendJson<{ category: { id: number } }>(
+    cfg, "POST", `${base(cfg)}/${locale}/categories.json`,
+    { category: { name: input.name, description: input.description ?? "" } }
+  );
+  return data.category.id;
+}
+
+/** Create a section under a category (nest it by passing a parentSectionId —
+ *  Enterprise-only). Returns its new id. */
+export async function createSection(
+  cfg: ZendeskConfig, locale: string,
+  input: { name: string; categoryId: number; parentSectionId?: number | null }
+): Promise<number> {
+  const section: Record<string, unknown> = { name: input.name };
+  if (input.parentSectionId) section.parent_section_id = input.parentSectionId;
+  const data = await sendJson<{ section: { id: number } }>(
+    cfg, "POST", `${base(cfg)}/${locale}/categories/${input.categoryId}/sections.json`,
+    { section }
+  );
+  return data.section.id;
+}
+
+/** The permission group new articles are created under. Guide requires one on
+ *  create; there's no sensible default, so fail loudly rather than guess. */
+function permissionGroupId(): number {
+  const raw = process.env.ZENDESK_PERMISSION_GROUP_ID;
+  const id = raw ? Number(raw) : NaN;
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Creating articles needs ZENDESK_PERMISSION_GROUP_ID (a Guide permission group id)");
+  }
+  return id;
+}
+
+/** Create an article, PUBLISHED LIVE (draft:false), visible to everyone
+ *  (user_segment_id:null). Returns its id and public url. */
+export async function createArticle(
+  cfg: ZendeskConfig, locale: string, sectionId: number, input: { title: string; body: string }
+): Promise<{ id: number; url: string }> {
+  const data = await sendJson<{ article: { id: number; html_url: string } }>(
+    cfg, "POST", `${base(cfg)}/${locale}/sections/${sectionId}/articles.json`,
+    {
+      article: {
+        title: input.title,
+        body: input.body,
+        locale,
+        draft: false, // publish live — the user's explicit choice
+        user_segment_id: null, // everyone
+        permission_group_id: permissionGroupId(),
+      },
+      notify_subscribers: false,
+    }
+  );
+  return { id: data.article.id, url: data.article.html_url };
+}
+
+/**
+ * Update an article: publish the translation, and reparent it to `sectionId`.
+ *
+ * The article-level PUT carries `section_id` so a re-filed article actually
+ * MOVES in Zendesk (sending it every time is idempotent — it just sets the
+ * current section). Publishing lives on the translation PUT (`draft:false`);
+ * the article-level `draft` is derived, not directly settable, so it's not sent.
+ */
+export async function updateArticle(
+  cfg: ZendeskConfig, locale: string, articleId: number, sectionId: number, input: { title: string; body: string }
+): Promise<{ id: number; url: string }> {
+  await sendJson<unknown>(
+    cfg, "PUT", `${base(cfg)}/articles/${articleId}/translations/${locale}.json`,
+    { translation: { title: input.title, body: input.body, draft: false } }
+  );
+  const data = await sendJson<{ article: { id: number; html_url: string } }>(
+    cfg, "PUT", `${base(cfg)}/articles/${articleId}.json`, { article: { section_id: sectionId } }
+  );
+  return { id: data.article.id, url: data.article.html_url };
+}
+
+/**
+ * Upload an image as an unassociated inline article attachment. Returns the
+ * public content_url to point the body's <img src> at; the attachment is bound
+ * to the article when the article is saved with a body referencing that url.
+ */
+export async function uploadAttachment(
+  cfg: ZendeskConfig, fileName: string, bytes: Buffer, contentType: string
+): Promise<{ id: number; contentUrl: string }> {
+  const form = new FormData();
+  form.append("inline", "true");
+  form.append("file", new Blob([new Uint8Array(bytes)], { type: contentType }), fileName);
+  const res = await fetch(`${base(cfg)}/articles/attachments.json`, {
+    method: "POST",
+    headers: { Authorization: authHeader(cfg), Accept: "application/json" },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Zendesk ${res.status} on attachment upload (${fileName}): ${text.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { article_attachment: { id: number; content_url: string } };
+  return { id: data.article_attachment.id, contentUrl: data.article_attachment.content_url };
 }
