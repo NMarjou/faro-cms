@@ -584,6 +584,7 @@ export default function SidebarTree() {
           {techWriter && (
             <>
               {navItem("/publish", "cloud-arrow-up", "Publish", pathname === "/publish")}
+              {navItem("/zendesk", "cloud-arrow-up", "Zendesk", pathname === "/zendesk")}
               {navItem("/import", "download-simple", "Import", pathname === "/import")}
               {navItem("/link-mapper", "link", "Link Mapper", pathname === "/link-mapper")}
               {navItem("/qa", "check-circle", "QA", pathname === "/qa")}
@@ -883,6 +884,11 @@ export default function SidebarTree() {
         <Link href="/publish" className={`tree-nav-link${pathname === "/publish" ? " active" : ""}`}>
           <Icon name="cloud-arrow-up" />
           Publish
+        </Link>
+
+        <Link href="/zendesk" className={`tree-nav-link${pathname === "/zendesk" ? " active" : ""}`}>
+          <Icon name="cloud-arrow-up" />
+          Zendesk
         </Link>
 
         <Link href="/import" className={`tree-nav-link${pathname === "/import" ? " active" : ""}`}>
