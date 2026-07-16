@@ -28,8 +28,12 @@ export interface ZendeskArticleRef {
 
 export interface ZendeskMap {
   /** Zendesk brand this project's help centre lives under (one project → one
-   *  brand). Recorded at bootstrap; sync refuses to run against a different one. */
+   *  brand). Chosen via the brand picker; the live sync refuses to run until
+   *  it's set, so a token can't quietly publish every project to one help centre. */
   brandId?: number;
+  /** The chosen brand's Help Center host (e.g. "brand-a.zendesk.com"). Stored
+   *  alongside brandId so calls route to the brand without re-listing every time. */
+  brandHost?: string;
   /** Help-centre locale, e.g. "en-us". Zendesk keys articles by locale. */
   locale: string;
   /** Faro category slug → Zendesk category id. */
@@ -57,6 +61,7 @@ export async function loadZendeskMap(): Promise<ZendeskMap> {
     // hit an undefined bucket.
     return {
       brandId: parsed.brandId,
+      brandHost: parsed.brandHost,
       locale: parsed.locale || "en-us",
       categories: parsed.categories ?? {},
       sections: parsed.sections ?? {},

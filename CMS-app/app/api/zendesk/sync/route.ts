@@ -69,8 +69,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ dryRun: true, plan }, { headers: NO_STORE });
     }
 
-    // Live: reconcile against Zendesk for the confirm-guard, then execute.
-    const cfg = getZendeskConfig();
+    // A live sync writes to a specific brand's help centre. Without a chosen
+    // brand we'd route to the account default and could publish every project
+    // into one help centre — refuse rather than guess.
+    if (!map.brandId || !map.brandHost) {
+      return NextResponse.json(
+        { error: "Select a Zendesk brand before syncing (Zendesk → Publishing to)." },
+        { status: 409, headers: NO_STORE }
+      );
+    }
+
+    // Live: reconcile against the selected brand, run the confirm-guard, execute.
+    const cfg = { ...getZendeskConfig(), brandHost: map.brandHost };
     const locale = map.locale || "en-us";
     const [categories, sections] = await Promise.all([
       listCategories(cfg, locale),

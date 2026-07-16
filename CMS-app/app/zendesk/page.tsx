@@ -105,6 +105,10 @@ export default function ZendeskPage() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [confirmingSync, setConfirmingSync] = useState(false);
+  const [brands, setBrands] = useState<{ id: number; name: string; host: string; active: boolean }[] | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<number | null>(null);
+  const [brandBusy, setBrandBusy] = useState(false);
+  const [brandError, setBrandError] = useState<string | null>(null);
 
   const runBootstrap = async () => {
     setLoading(true);
@@ -202,7 +206,44 @@ export default function ZendeskPage() {
     }
   };
 
+  const loadBrands = async () => {
+    setBrandBusy(true);
+    setBrandError(null);
+    try {
+      const res = await fetch("/api/zendesk/brands");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't load brands");
+      setBrands(data.brands);
+      setSelectedBrand(data.selected ?? null);
+    } catch (err) {
+      setBrandError(err instanceof Error ? err.message : "Couldn't load brands");
+    } finally {
+      setBrandBusy(false);
+    }
+  };
+
+  const chooseBrand = async (brandId: number) => {
+    setBrandBusy(true);
+    setBrandError(null);
+    try {
+      const res = await fetch("/api/zendesk/brands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't select brand");
+      setSelectedBrand(data.selected);
+    } catch (err) {
+      setBrandError(err instanceof Error ? err.message : "Couldn't select brand");
+    } finally {
+      setBrandBusy(false);
+    }
+  };
+
   if (loaded && !canPublish(role)) return <TechWriterBlocked title="Zendesk sync" />;
+
+  const selectedBrandName = brands?.find((b) => b.id === selectedBrand)?.name;
 
   const s = result?.plan.summary;
 
@@ -221,6 +262,37 @@ export default function ZendeskPage() {
           place instead of duplicating. Articles are published live automatically on sync; only the
           structure needs your review here.
         </p>
+
+        {/* Which brand's help centre this project targets. A multi-brand account
+            has one per brand; everything below routes to the chosen one. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16, padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 14 }}>
+          <strong>Publishing to:</strong>
+          {selectedBrandName ? (
+            <span style={{ color: "var(--success, var(--info))", fontWeight: 600 }}>{selectedBrandName}</span>
+          ) : selectedBrand ? (
+            <span style={{ color: "var(--fg-muted)" }}>brand #{selectedBrand}</span>
+          ) : (
+            <span style={{ color: "var(--warning)" }}>no brand selected</span>
+          )}
+          {!brands ? (
+            <button className="btn" disabled={brandBusy} onClick={loadBrands}>
+              {brandBusy ? "Loading…" : "Choose brand"}
+            </button>
+          ) : (
+            <select
+              value={selectedBrand ?? ""}
+              disabled={brandBusy}
+              onChange={(e) => { const id = Number(e.target.value); if (id) chooseBrand(id); }}
+              style={{ fontSize: 13, padding: "4px 8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--fg)" }}
+            >
+              <option value="">Select a brand…</option>
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}{b.active ? "" : " (inactive)"} — {b.host}</option>
+              ))}
+            </select>
+          )}
+          {brandError && <span style={{ color: "var(--danger)", fontSize: 13 }}>{brandError}</span>}
+        </div>
 
         {error && (
           <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 16, fontSize: 14 }}>
