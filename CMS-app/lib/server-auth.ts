@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, isAuthConfigured } from "./auth-options";
 import { getFile } from "./storage";
+import { flattenTocArticles } from "./toc-walk";
 import {
   DEFAULT_USERS,
   type Toc,
@@ -87,21 +88,19 @@ async function resolveIdentityEmail(request: Request): Promise<string | null> {
   return request.headers.get(IDENTITY_HEADER);
 }
 
-/** Walk the TOC (categories → sections → subsections, plus standalone) for a file. */
+/**
+ * Find a TOC article by file — at ANY depth, plus the standalone bucket.
+ *
+ * This used to hand-roll its own walk that recursed exactly ONE level into
+ * subsections, so an article nested deeper returned null. Since ownership is
+ * read off the returned entry, that silently locked AUTHORS out of their own
+ * deeply-nested articles (`canEditArticle(role, null, …)` → false), while tech
+ * writers sailed through — so it never showed up in testing. Use the one shared
+ * walker instead: lib/toc-walk.ts is the single source of truth for "what are
+ * all the articles?".
+ */
 export function findTocArticle(toc: Toc, file: string): TocArticle | null {
-  for (const cat of toc.categories) {
-    for (const sec of cat.sections) {
-      const direct = sec.articles.find((a) => a.file === file);
-      if (direct) return direct;
-      if (sec.subsections) {
-        for (const sub of sec.subsections) {
-          const nested = sub.articles.find((a) => a.file === file);
-          if (nested) return nested;
-        }
-      }
-    }
-  }
-  return toc.articles?.find((a) => a.file === file) || null;
+  return flattenTocArticles(toc).find((a) => a.file === file) ?? null;
 }
 
 /** Load + parse the TOC; null on any failure (callers default-deny). */

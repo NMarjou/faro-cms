@@ -6,15 +6,21 @@ import Link from "next/link";
 import type { Toc, TocCategory, TocSection, TocArticle } from "@/lib/types";
 import { flattenTocArticles, articlesInSections } from "@/lib/toc-walk";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import { canCreateArticles } from "@/lib/permissions";
+import { canCreateArticles, canEditArticle } from "@/lib/permissions";
 import ArticleStatusBadge from "@/components/ArticleStatusBadge";
 import Icon from "@/components/Icon";
 
 export default function ArticlesPage() {
-  const { role } = useCurrentUser();
+  const { role, user } = useCurrentUser();
   const canCreate = canCreateArticles(role);
   const [toc, setToc] = useState<Toc | null>(null);
   const [loading, setLoading] = useState(true);
+  // Two-step delete: first click arms the row, second confirms. Deleting removes
+  // the article AND its TOC entry, and (once synced) deletes it from Zendesk —
+  // so it must never be one stray click away.
+  const [armedDelete, setArmedDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set()
   );
@@ -41,6 +47,29 @@ export default function ArticlesPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  const deleteArticle = async (article: TocArticle) => {
+    setDeleting(article.file);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/article/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: article.file }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      // Re-read rather than patch local state: the server owns the TOC, and a
+      // stale list here would misreport what's actually gone.
+      const fresh = await fetch("/api/toc", { cache: "no-store" }).then((r) => r.json());
+      setToc(fresh);
+      setArmedDelete(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const toggleCategory = (slug: string) => {
     setExpandedCategories((prev) => {
@@ -165,6 +194,41 @@ export default function ArticlesPage() {
             {allReviewersDone && <span style={{ marginLeft: 2 }}>·</span>}
           </span>
         )}
+        {canEditArticle(role, article, user?.email) && (
+          // Inside a <Link>, so every click here must preventDefault or the row
+          // navigates to the editor instead of arming/confirming the delete.
+          armedDelete === article.file ? (
+            <>
+              <span style={{ fontSize: 12, color: "var(--danger)" }}>Delete permanently?</span>
+              <button
+                className="btn"
+                disabled={deleting === article.file}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteArticle(article); }}
+                style={{ fontSize: 11, padding: "2px 8px", color: "var(--danger)", borderColor: "var(--danger)" }}
+              >
+                {deleting === article.file ? "Deleting…" : "Yes, delete"}
+              </button>
+              <button
+                className="btn"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setArmedDelete(null); }}
+                style={{ fontSize: 11, padding: "2px 8px" }}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              title="Delete this article and its TOC entry"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteError(null); setArmedDelete(article.file); }}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--fg-muted)", fontSize: 14, lineHeight: 1, padding: "2px 6px",
+              }}
+            >
+              ×
+            </button>
+          )
+        )}
       </Link>
     );
   };
@@ -181,6 +245,11 @@ export default function ArticlesPage() {
         )}
       </PageHeader>
       <div className="main-body">
+        {deleteError && (
+          <div style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 12, fontSize: 14 }}>
+            {deleteError}
+          </div>
+        )}
         {loading && <p>Loading articles...</p>}
         {!loading && !toc && (
           <div className="empty-state">
