@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flattenTocArticles, articlesInSections, mapSectionTree } from "./toc-walk";
+import { flattenTocArticles, articlesInSections, mapSectionTree, removeArticleFromToc } from "./toc-walk";
 import type { Toc, TocSection, TocArticle } from "./types";
 
 /**
@@ -46,6 +46,48 @@ const toc: Toc = {
   ],
   articles: [art("uncategorized")],
 };
+
+describe("removeArticleFromToc", () => {
+  /**
+   * A TOC entry pointing at a deleted article is a broken contract: compile
+   * can't read the file, publish skips it silently, and the Zendesk sync can
+   * never distinguish "deleted" from "unreadable" — so it would stay live in the
+   * customer help centre forever. Deleting must remove the entry, at any depth.
+   */
+  it("removes an article nested two levels deep", () => {
+    const { toc: next, removed } = removeArticleFromToc(toc, "depth-2.html");
+    expect(removed).toBe(true);
+    expect(flattenTocArticles(next).map((a) => a.slug)).not.toContain("depth-2");
+    // everything else survives
+    expect(flattenTocArticles(next).map((a) => a.slug).sort()).toEqual(["depth-1", "top-1", "uncategorized"]);
+  });
+
+  it("removes an article from the uncategorised bucket", () => {
+    const { toc: next, removed } = removeArticleFromToc(toc, "uncategorized.html");
+    expect(removed).toBe(true);
+    expect(next.articles).toEqual([]);
+    expect(flattenTocArticles(next).map((a) => a.slug)).not.toContain("uncategorized");
+  });
+
+  it("reports removed:false when the entry isn't there (no pointless write)", () => {
+    const { removed } = removeArticleFromToc(toc, "never-existed.html");
+    expect(removed).toBe(false);
+  });
+
+  it("does not mutate the original TOC", () => {
+    const before = JSON.stringify(toc);
+    removeArticleFromToc(toc, "depth-2.html");
+    expect(JSON.stringify(toc)).toBe(before);
+  });
+
+  it("preserves section structure and sibling order", () => {
+    const { toc: next } = removeArticleFromToc(toc, "top-1.html");
+    const help = next.categories[0];
+    expect(help.sections.map((s) => s.slug)).toEqual(["passport", "empty"]);
+    expect(help.sections[0].subsections?.[0].slug).toBe("nested");
+    expect(help.sections[0].articles).toEqual([]); // only top-1 went
+  });
+});
 
 describe("flattenTocArticles", () => {
   it("finds articles in subsections at ANY depth (compile used to miss these entirely)", () => {
