@@ -99,6 +99,66 @@ export function planFromMap(toc: Toc, map: ZendeskMap): ReconcilePlan {
   return { nodes, orphans: { categories: [], sections: [] }, summary };
 }
 
+// ── Deletions (pure) ─────────────────────────────────────────────────────────
+
+/**
+ * Deleting is PERMANENT in Zendesk and there is no undo Faro can drive, so the
+ * bar for inferring "this was deleted" is high.
+ *
+ * The signal is: **in the id-map, but absent from the TOC entirely**. Faro's
+ * delete removes the file AND its TOC entry together (see /api/article/delete),
+ * so a missing entry is a deliberate delete.
+ *
+ * What is deliberately NOT a delete signal:
+ *  • an article that failed to COMPILE — it's still in the TOC. Keying off the
+ *    compiled set would destroy live articles over a transient template error.
+ *  • an UNFILED article (still in toc.articles) — it has a TOC entry, so it
+ *    wasn't deleted; it just has no section. It stops publishing, nothing more.
+ *  • anything not in the map — Faro never created it, so it's someone else's
+ *    content in that help centre and is never touched.
+ */
+export function planDeletions(
+  map: ZendeskMap,
+  tocFiles: Set<string>
+): { file: string; id: number }[] {
+  return Object.entries(map.articles)
+    .filter(([file]) => !tocFiles.has(file))
+    .map(([file, ref]) => ({ file, id: ref.id }));
+}
+
+/** Hard ceiling on one run's deletions before an explicit override is required. */
+export const MASS_DELETE_ABSOLUTE = 10;
+/** …or this share of everything Faro has mapped, whichever is smaller. */
+export const MASS_DELETE_FRACTION = 0.25;
+
+/**
+ * Refuse a suspiciously large delete sweep.
+ *
+ * The scenario this exists for: the TOC fails to load, or loads empty, and every
+ * mapped article suddenly looks "deleted" — wiping a customer's help centre in
+ * one run. A bug must not be indistinguishable from an instruction.
+ */
+export function checkDeletionSafety(
+  deletions: { file: string; id: number }[],
+  map: ZendeskMap,
+  tocFiles: Set<string>
+): { safe: boolean; reason?: string } {
+  if (deletions.length === 0) return { safe: true };
+  const mapped = Object.keys(map.articles).length;
+  // An empty TOC alongside mapped articles is a read failure, not a mass delete.
+  if (tocFiles.size === 0 && mapped > 0) {
+    return { safe: false, reason: "The TOC has no articles at all — refusing to treat that as deleting everything." };
+  }
+  const cap = Math.min(MASS_DELETE_ABSOLUTE, Math.max(1, Math.ceil(mapped * MASS_DELETE_FRACTION)));
+  if (deletions.length > cap) {
+    return {
+      safe: false,
+      reason: `${deletions.length} articles would be permanently deleted (over the ${cap} safe limit for ${mapped} mapped). Confirm explicitly if that's intended.`,
+    };
+  }
+  return { safe: true };
+}
+
 // ── Planner (pure) ───────────────────────────────────────────────────────────
 
 export type SyncAction = "create" | "update" | "skip";
@@ -119,12 +179,19 @@ export interface SyncPlan {
   ops: SyncOp[];
   /** Articles that cannot sync (no Zendesk home). */
   blocked: { file: string; reason: string }[];
+  /** Articles that will be PERMANENTLY deleted from Zendesk — named in full, so
+   *  the destructive list is reviewable before anything runs. */
+  deletions: { file: string; id: number }[];
+  /** Set when the mass-deletion guard tripped; deletions won't run without an
+   *  explicit override. */
+  deletionsBlocked?: string;
   summary: {
     categoriesCreate: number;
     sectionsCreate: number;
     articlesCreate: number;
     articlesUpdate: number;
     articlesSkip: number;
+    articlesDelete: number;
     blocked: number;
   };
 }
@@ -146,13 +213,17 @@ export function buildSyncPlan(
   plan: ReconcilePlan,
   map: ZendeskMap,
   articles: PlannedArticle[],
-  unfiled: string[]
+  unfiled: string[],
+  /** Every file the TOC still knows about (filed + unfiled). Anything mapped but
+   *  absent from this set was deleted in Faro. Pass the TOC's own set — NOT the
+   *  successfully-compiled one, or a compile error reads as a delete. */
+  tocFiles?: Set<string>
 ): SyncPlan {
   const unconfirmed = collectUnconfirmed(plan.nodes);
   const ops: SyncOp[] = [];
   const summary = {
     categoriesCreate: 0, sectionsCreate: 0,
-    articlesCreate: 0, articlesUpdate: 0, articlesSkip: 0, blocked: 0,
+    articlesCreate: 0, articlesUpdate: 0, articlesSkip: 0, articlesDelete: 0, blocked: 0,
   };
 
   // Structure: linked ⇒ exists (skip); create ⇒ create. (matched/ambiguous/stale
@@ -198,9 +269,22 @@ export function buildSyncPlan(
     }
   }
 
+  // Deletions: mapped articles the TOC no longer knows about. Only computed when
+  // the caller supplies the TOC set — no set means "don't infer deletes at all",
+  // which is the safe default for any caller that hasn't thought about it.
+  const deletions = tocFiles ? planDeletions(map, tocFiles) : [];
+  const safety = tocFiles ? checkDeletionSafety(deletions, map, tocFiles) : { safe: true as const };
+  summary.articlesDelete = deletions.length;
   summary.blocked = blocked.length;
-  const ready = unconfirmed.length === 0;
-  return { ready, unconfirmed, ops, blocked, summary };
+
+  // A tripped mass-delete guard blocks the whole run: the sync isn't "ready"
+  // while it would destroy more than the safe limit without explicit consent.
+  const ready = unconfirmed.length === 0 && safety.safe;
+  return {
+    ready, unconfirmed, ops, blocked, deletions,
+    ...(safety.safe ? {} : { deletionsBlocked: safety.reason }),
+    summary,
+  };
 }
 
 // ── Executor ─────────────────────────────────────────────────────────────────
@@ -213,6 +297,9 @@ export interface ZendeskWriter {
   /** Update body/title AND reparent to sectionId (moves a re-filed article). */
   updateArticle(id: number, sectionId: number, a: { title: string; body: string }): Promise<{ id: number; url: string }>;
   uploadAttachment(fileName: string, bytes: Buffer, contentType: string): Promise<{ contentUrl: string }>;
+  /** PERMANENTLY delete an article. No undo — only ever called for articles the
+   *  map owns and that the TOC no longer knows about. */
+  deleteArticle(id: number): Promise<void>;
 }
 
 export interface SyncDeps {
@@ -231,6 +318,8 @@ export interface SyncReport {
   articlesCreated: number;
   articlesUpdated: number;
   articlesSkipped: number;
+  /** Permanently deleted from Zendesk (deleted in Faro). */
+  articlesDeleted: number;
   imagesUploaded: number;
   /** Per-item failures — the sync continues past them rather than aborting. */
   failures: { key: string; error: string }[];
@@ -263,11 +352,17 @@ export async function executeSync(args: {
   map: ZendeskMap;
   articles: SyncArticle[];
   deps: SyncDeps;
+  /** Articles to permanently delete — already vetted by planDeletions +
+   *  checkDeletionSafety. Omit to delete nothing. */
+  deletions?: { file: string; id: number }[];
+  /** Required to exceed the mass-deletion cap. Re-checked here as defence in
+   *  depth: permanent deletion shouldn't rest on one caller getting it right. */
+  allowMassDelete?: boolean;
 }): Promise<SyncReport> {
-  const { plan, map, articles, deps } = args;
+  const { plan, map, articles, deps, deletions = [], allowMassDelete = false } = args;
   const report: SyncReport = {
     categoriesCreated: 0, sectionsCreated: 0,
-    articlesCreated: 0, articlesUpdated: 0, articlesSkipped: 0,
+    articlesCreated: 0, articlesUpdated: 0, articlesSkipped: 0, articlesDeleted: 0,
     imagesUploaded: 0, failures: [], internalLinks: [],
   };
 
@@ -358,6 +453,33 @@ export async function executeSync(args: {
       await deps.persist(map);
     } catch (e) {
       report.failures.push({ key: a.file, error: msg(e) });
+    }
+  }
+
+  // 4. Deletions — LAST, and permanent. Running after the creates/updates means a
+  //    failure earlier never leaves content deleted but not republished.
+  if (deletions.length) {
+    const cap = Math.min(MASS_DELETE_ABSOLUTE, Math.max(1, Math.ceil(Object.keys(map.articles).length * MASS_DELETE_FRACTION)));
+    if (deletions.length > cap && !allowMassDelete) {
+      // Defence in depth: the route checks this too, but permanent deletion
+      // shouldn't depend on a single caller having got it right.
+      report.failures.push({
+        key: "(deletions)",
+        error: `Refused to delete ${deletions.length} articles without explicit confirmation (safe limit ${cap}).`,
+      });
+      return report;
+    }
+    for (const d of deletions) {
+      try {
+        await deps.writer.deleteArticle(d.id);
+        // Drop it from the map only after Zendesk confirms, so a failure leaves
+        // the mapping intact and the next run retries rather than orphaning it.
+        delete map.articles[d.file];
+        await deps.persist(map);
+        report.articlesDeleted++;
+      } catch (e) {
+        report.failures.push({ key: d.file, error: msg(e) });
+      }
     }
   }
 

@@ -235,6 +235,24 @@ export async function updateArticle(
 }
 
 /**
+ * PERMANENTLY delete an article. There is no undo in Zendesk.
+ *
+ * A 404 is treated as success: the article is already gone, which is the desired
+ * end state, and failing here would leave the map entry behind and retry forever.
+ */
+export async function deleteArticle(cfg: ZendeskConfig, articleId: number): Promise<void> {
+  const url = `${base(cfg)}/articles/${articleId}.json`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: authHeader(cfg), Accept: "application/json" },
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Zendesk ${res.status} on DELETE ${url}: ${text.slice(0, 300)}`);
+  }
+}
+
+/**
  * Upload an image as an unassociated inline article attachment. Returns the
  * public content_url to point the body's <img src> at; the attachment is bound
  * to the article when the article is saved with a body referencing that url.
