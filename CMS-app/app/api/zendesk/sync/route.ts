@@ -11,10 +11,11 @@ import { loadZendeskMap, saveZendeskMap } from "@/lib/zendesk-map";
 import { reconcile } from "@/lib/zendesk-reconcile";
 import {
   getZendeskConfig, listCategories, listSections,
-  createCategory, createSection, createArticle, updateArticle, uploadAttachment,
+  createCategory, createSection, createArticle, updateArticle, uploadAttachment, deleteArticle,
 } from "@/lib/zendesk";
 import {
   articlesWithSectionPaths, buildSyncPlan, executeSync, hashArticle, planFromMap,
+  planDeletions, checkDeletionSafety,
   type SyncArticle, type ZendeskWriter,
 } from "@/lib/zendesk-sync";
 
@@ -39,15 +40,22 @@ export async function POST(request: NextRequest) {
   if (!canPublish(user?.role ?? null)) return forbidden("You don't have permission to publish");
 
   try {
-    const { dryRun, activeTags } = (await request.json().catch(() => ({}))) as {
+    const { dryRun, activeTags, allowMassDelete } = (await request.json().catch(() => ({}))) as {
       dryRun?: boolean;
       activeTags?: string[];
+      allowMassDelete?: boolean;
     };
     const tags = Array.isArray(activeTags) && activeTags.length ? activeTags : undefined;
 
     const map = await loadZendeskMap();
     const toc = await getToc();
     const { filed, unfiled } = articlesWithSectionPaths(toc);
+
+    // Every file the TOC still knows about. Deletions are inferred from THIS —
+    // never from the compiled set below, which silently drops articles that fail
+    // to compile. Keying off that would permanently delete a live article over a
+    // transient template error.
+    const tocFiles = new Set<string>([...filed.map((a) => a.file), ...unfiled]);
 
     // Compile every filed article once: body (for sync) + its images + a content
     // hash (unchanged hash ⇒ the sync skips it).
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (dryRun) {
-      const plan = buildSyncPlan(planFromMap(toc, map), map, articles, unfiled);
+      const plan = buildSyncPlan(planFromMap(toc, map), map, articles, unfiled, tocFiles);
       return NextResponse.json({ dryRun: true, plan }, { headers: NO_STORE });
     }
 
@@ -75,6 +83,18 @@ export async function POST(request: NextRequest) {
     if (!map.brandId || !map.brandHost) {
       return NextResponse.json(
         { error: "Select a Zendesk brand before syncing (Zendesk → Publishing to)." },
+        { status: 409, headers: NO_STORE }
+      );
+    }
+
+    // Deletions are permanent. Check BEFORE touching Zendesk: a destructive plan
+    // should be refused on local state alone, with no network calls first — a
+    // TOC that failed to load must never read as "delete everything".
+    const deletions = planDeletions(map, tocFiles);
+    const safety = checkDeletionSafety(deletions, map, tocFiles);
+    if (!safety.safe && !allowMassDelete) {
+      return NextResponse.json(
+        { error: safety.reason, deletions, needsConfirmation: true },
         { status: 409, headers: NO_STORE }
       );
     }
@@ -94,12 +114,15 @@ export async function POST(request: NextRequest) {
       createArticle: (sectionId, a) => createArticle(cfg, locale, sectionId, a),
       updateArticle: (id, sectionId, a) => updateArticle(cfg, locale, id, sectionId, a),
       uploadAttachment: (fileName, bytes, contentType) => uploadAttachment(cfg, fileName, bytes, contentType),
+      deleteArticle: (id) => deleteArticle(cfg, id),
     };
 
     const report = await executeSync({
       plan: recon,
       map,
       articles,
+      deletions,
+      allowMassDelete: !!allowMassDelete,
       deps: {
         writer,
         loadBytes: (p) => getFileBytes(p),

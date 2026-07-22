@@ -5,6 +5,8 @@ import {
   hashArticle,
   articlesWithSectionPaths,
   planFromMap,
+  planDeletions,
+  checkDeletionSafety,
   type ZendeskWriter,
   type SyncArticle,
   type SyncDeps,
@@ -39,6 +41,7 @@ function mockWriter() {
     createArticle: [] as { sectionId: number; title: string; body: string }[],
     updateArticle: [] as { id: number; sectionId: number; title: string; body: string }[],
     uploadAttachment: [] as string[],
+    deleteArticle: [] as number[],
   };
   const writer: ZendeskWriter = {
     async createCategory(name) { calls.createCategory.push(name); return ++cat; },
@@ -46,6 +49,7 @@ function mockWriter() {
     async createArticle(sectionId, a) { calls.createArticle.push({ sectionId, ...a }); const id = ++art; return { id, url: `https://z/hc/articles/${id}` }; },
     async updateArticle(id, sectionId, a) { calls.updateArticle.push({ id, sectionId, ...a }); return { id, url: `https://z/hc/articles/${id}` }; },
     async uploadAttachment(fileName) { calls.uploadAttachment.push(fileName); return { contentUrl: `https://z/attachments/${fileName}` }; },
+    async deleteArticle(id) { calls.deleteArticle.push(id); },
   };
   return { writer, calls };
 }
@@ -287,6 +291,141 @@ describe("executeSync", () => {
     expect(calls.createSection).toHaveLength(2);
     expect(calls.createSection[0].parentSectionId).toBeNull();
     expect(calls.createSection[1].parentSectionId).toBe(map.sections["help/p"]);
+  });
+});
+
+describe("planDeletions + checkDeletionSafety", () => {
+  /**
+   * Deletion is PERMANENT in Zendesk with no undo Faro can drive, so every way a
+   * non-delete could be mistaken for a delete is asserted here.
+   */
+  const mapWith = (files: Record<string, number>): ZendeskMap => ({
+    ...emptyMap(),
+    articles: Object.fromEntries(Object.entries(files).map(([f, id]) => [f, { id, hash: "h" }])),
+  });
+
+  it("deletes a mapped article the TOC no longer knows about", () => {
+    const map = mapWith({ "a.html": 1, "gone.html": 2 });
+    const dels = planDeletions(map, new Set(["a.html"]));
+    expect(dels).toEqual([{ file: "gone.html", id: 2 }]);
+  });
+
+  it("NEVER deletes an article that is merely UNFILED (still in the TOC)", () => {
+    // Unfiled means no section, not deleted — it has a TOC entry.
+    const map = mapWith({ "a.html": 1, "unfiled.html": 2 });
+    expect(planDeletions(map, new Set(["a.html", "unfiled.html"]))).toEqual([]);
+  });
+
+  it("NEVER deletes content Faro didn't create (not in the map)", () => {
+    const map = mapWith({ "a.html": 1 });
+    // The help centre holds other articles; none are in the map, so none appear.
+    expect(planDeletions(map, new Set(["a.html"]))).toEqual([]);
+  });
+
+  it("refuses to treat an EMPTY TOC as deleting everything (read failure)", () => {
+    const map = mapWith({ "a.html": 1, "b.html": 2, "c.html": 3 });
+    const dels = planDeletions(map, new Set());
+    expect(dels).toHaveLength(3);
+    const safety = checkDeletionSafety(dels, map, new Set());
+    expect(safety.safe).toBe(false);
+    expect(safety.reason).toMatch(/no articles at all/i);
+  });
+
+  it("refuses a sweep over the safe limit, naming the counts", () => {
+    const files: Record<string, number> = {};
+    for (let i = 0; i < 40; i++) files[`a${i}.html`] = i + 1;
+    const map = mapWith(files);
+    const keep = new Set(["a0.html"]); // 39 would go — way over the cap
+    const safety = checkDeletionSafety(planDeletions(map, keep), map, keep);
+    expect(safety.safe).toBe(false);
+    expect(safety.reason).toMatch(/39 articles would be permanently deleted/i);
+  });
+
+  it("allows a small, plausible deletion", () => {
+    const files: Record<string, number> = {};
+    for (let i = 0; i < 20; i++) files[`a${i}.html`] = i + 1;
+    const map = mapWith(files);
+    const keep = new Set(Object.keys(files).slice(0, 19)); // exactly one deleted
+    const safety = checkDeletionSafety(planDeletions(map, keep), map, keep);
+    expect(safety.safe).toBe(true);
+  });
+
+  it("is a no-op when nothing was deleted", () => {
+    const map = mapWith({ "a.html": 1 });
+    const keep = new Set(["a.html"]);
+    expect(planDeletions(map, keep)).toEqual([]);
+    expect(checkDeletionSafety([], map, keep).safe).toBe(true);
+  });
+});
+
+describe("executeSync — deletions", () => {
+  const linkedPlan = plan([catNode("help", "Help", "linked", [secNode("help/p", "P", "linked", [], 700)], 500)]);
+  const mappedMap = (extra: Record<string, number> = {}): ZendeskMap => ({
+    ...emptyMap(),
+    categories: { help: 500 }, sections: { "help/p": 700 },
+    articles: Object.fromEntries(Object.entries(extra).map(([f, id]) => [f, { id, hash: "h" }])),
+  });
+
+  it("permanently deletes the article and drops it from the map", async () => {
+    const { writer, calls } = mockWriter();
+    const persisted: ZendeskMap[] = [];
+    const map = mappedMap({ "gone.html": 77 });
+    const report = await executeSync({
+      plan: linkedPlan, map, articles: [],
+      deletions: [{ file: "gone.html", id: 77 }],
+      deps: deps(writer, persisted),
+    });
+    expect(calls.deleteArticle).toEqual([77]);
+    expect(report.articlesDeleted).toBe(1);
+    expect(map.articles["gone.html"]).toBeUndefined(); // mapping dropped
+    expect(persisted).toHaveLength(1);                 // and persisted
+  });
+
+  it("KEEPS the mapping when the delete fails, so the next run retries", async () => {
+    const { writer } = mockWriter();
+    const failing: ZendeskWriter = { ...writer, deleteArticle: async () => { throw new Error("500 boom"); } };
+    const map = mappedMap({ "gone.html": 77 });
+    const report = await executeSync({
+      plan: linkedPlan, map, articles: [],
+      deletions: [{ file: "gone.html", id: 77 }],
+      deps: deps(failing, []),
+    });
+    expect(report.articlesDeleted).toBe(0);
+    expect(map.articles["gone.html"]).toBeDefined(); // not orphaned
+    expect(report.failures[0].key).toBe("gone.html");
+  });
+
+  it("refuses a mass delete without explicit confirmation (defence in depth)", async () => {
+    const { writer, calls } = mockWriter();
+    const files: Record<string, number> = {};
+    for (let i = 0; i < 40; i++) files[`a${i}.html`] = i + 1;
+    const map = mappedMap(files);
+    const deletions = Object.entries(files).map(([file, id]) => ({ file, id }));
+    const report = await executeSync({
+      plan: linkedPlan, map, articles: [], deletions, deps: deps(writer, []),
+    });
+    expect(calls.deleteArticle).toHaveLength(0); // nothing destroyed
+    expect(report.articlesDeleted).toBe(0);
+    expect(report.failures[0].error).toMatch(/refused to delete/i);
+  });
+
+  it("performs the mass delete once explicitly confirmed", async () => {
+    const { writer, calls } = mockWriter();
+    const files: Record<string, number> = {};
+    for (let i = 0; i < 40; i++) files[`a${i}.html`] = i + 1;
+    const map = mappedMap(files);
+    const deletions = Object.entries(files).map(([file, id]) => ({ file, id }));
+    const report = await executeSync({
+      plan: linkedPlan, map, articles: [], deletions, allowMassDelete: true, deps: deps(writer, []),
+    });
+    expect(calls.deleteArticle).toHaveLength(40);
+    expect(report.articlesDeleted).toBe(40);
+  });
+
+  it("deletes nothing when no deletions are passed", async () => {
+    const { writer, calls } = mockWriter();
+    await executeSync({ plan: linkedPlan, map: mappedMap({ "a.html": 1 }), articles: [], deps: deps(writer, []) });
+    expect(calls.deleteArticle).toHaveLength(0);
   });
 });
 

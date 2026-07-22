@@ -48,14 +48,18 @@ interface SyncPlan {
   ready: boolean;
   unconfirmed: { key: string; name: string; status: string }[];
   blocked: { file: string; reason: string }[];
+  deletions: { file: string; id: number }[];
+  deletionsBlocked?: string;
   summary: {
     categoriesCreate: number; sectionsCreate: number;
-    articlesCreate: number; articlesUpdate: number; articlesSkip: number; blocked: number;
+    articlesCreate: number; articlesUpdate: number; articlesSkip: number;
+    articlesDelete: number; blocked: number;
   };
 }
 interface SyncReport {
   categoriesCreated: number; sectionsCreated: number;
   articlesCreated: number; articlesUpdated: number; articlesSkipped: number;
+  articlesDeleted: number;
   imagesUploaded: number;
   failures: { key: string; error: string }[];
   internalLinks: { file: string; count: number }[];
@@ -105,6 +109,7 @@ export default function ZendeskPage() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [confirmingSync, setConfirmingSync] = useState(false);
+  const [massDeleteWarning, setMassDeleteWarning] = useState<string | null>(null);
   const [brands, setBrands] = useState<{ id: number; name: string; host: string; active: boolean }[] | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<number | null>(null);
   const [brandBusy, setBrandBusy] = useState(false);
@@ -185,7 +190,7 @@ export default function ZendeskPage() {
     }
   };
 
-  const runSync = async () => {
+  const runSync = async (allowMassDelete = false) => {
     setSyncBusy(true);
     setSyncError(null);
     setConfirmingSync(false);
@@ -193,12 +198,18 @@ export default function ZendeskPage() {
       const res = await fetch("/api/zendesk/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dryRun: false }),
+        body: JSON.stringify({ dryRun: false, allowMassDelete }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Sync failed");
+      if (!res.ok) {
+        // The mass-deletion guard tripped: surface the count and offer a second,
+        // explicit confirmation rather than silently proceeding.
+        if (data.needsConfirmation) setMassDeleteWarning(data.error || "Too many deletions");
+        throw new Error(data.error || "Sync failed");
+      }
       setSyncReport(data.report as SyncReport);
       setSyncPlan(null);
+      setMassDeleteWarning(null);
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : "Sync failed");
     } finally {
@@ -390,6 +401,24 @@ export default function ZendeskPage() {
             </div>
           )}
 
+          {/* The mass-deletion guard refused the run. Deleting this many is far
+              more likely to be a bug than an intent, so proceeding takes its own
+              deliberate click. */}
+          {massDeleteWarning && (
+            <div style={{ background: "var(--danger-light)", border: "1px solid var(--danger)", color: "var(--danger)", padding: "10px 16px", borderRadius: "var(--radius)", marginBottom: 12, fontSize: 14 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Mass deletion refused</div>
+              <div style={{ marginBottom: 8 }}>{massDeleteWarning}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn" disabled={syncBusy} onClick={() => runSync(true)} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
+                  {syncBusy ? "Deleting…" : "I understand — delete them permanently"}
+                </button>
+                <button className="btn" disabled={syncBusy} onClick={() => { setMassDeleteWarning(null); setSyncError(null); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
             <button className="btn" disabled={syncBusy} onClick={previewSync}>
               {syncBusy ? "Working…" : "Preview sync"}
@@ -401,7 +430,7 @@ export default function ZendeskPage() {
             ) : (
               <>
                 <span style={{ fontSize: 13, color: "var(--danger)" }}>Publish live to customers?</span>
-                <button className="btn btn-primary" disabled={syncBusy} onClick={runSync}>
+                <button className="btn btn-primary" disabled={syncBusy} onClick={() => runSync(false)}>
                   {syncBusy ? "Syncing…" : "Yes, publish"}
                 </button>
                 <button className="btn" disabled={syncBusy} onClick={() => setConfirmingSync(false)}>Cancel</button>
@@ -419,9 +448,30 @@ export default function ZendeskPage() {
                   {syncPlan.summary.articlesUpdate} updated, {syncPlan.summary.articlesSkip} unchanged (skipped)
                 </li>
               </ul>
-              {!syncPlan.ready && (
+              {syncPlan.unconfirmed.length > 0 && (
                 <div style={{ marginTop: 8, color: "var(--warning)" }}>
                   {syncPlan.unconfirmed.length} unconfirmed match{syncPlan.unconfirmed.length !== 1 ? "es" : ""} — confirm above before a live sync.
+                </div>
+              )}
+
+              {/* Deleting is permanent in Zendesk, so the list is named in full —
+                  a count alone isn't reviewable. */}
+              {syncPlan.deletions.length > 0 && (
+                <div style={{ marginTop: 8, background: "var(--danger-light)", color: "var(--danger)", padding: "8px 12px", borderRadius: "var(--radius)" }}>
+                  <strong>
+                    {syncPlan.deletions.length} article{syncPlan.deletions.length !== 1 ? "s" : ""} will be PERMANENTLY deleted
+                  </strong>{" "}
+                  from Zendesk (deleted in Faro — no undo):
+                  <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                    {syncPlan.deletions.map((d) => (
+                      <li key={d.file}><code>{d.file}</code> (Zendesk #{d.id})</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {syncPlan.deletionsBlocked && (
+                <div style={{ marginTop: 8, color: "var(--danger)", fontWeight: 600 }}>
+                  {syncPlan.deletionsBlocked}
                 </div>
               )}
               {syncPlan.blocked.length > 0 && (
@@ -442,6 +492,11 @@ export default function ZendeskPage() {
                   {syncReport.articlesCreated} published, {syncReport.articlesUpdated} updated,{" "}
                   {syncReport.articlesSkipped} unchanged · {syncReport.imagesUploaded} images uploaded
                 </li>
+                {syncReport.articlesDeleted > 0 && (
+                  <li style={{ color: "var(--danger)" }}>
+                    {syncReport.articlesDeleted} article{syncReport.articlesDeleted !== 1 ? "s" : ""} permanently deleted
+                  </li>
+                )}
               </ul>
               {syncReport.internalLinks.length > 0 && (
                 <div style={{ marginTop: 8, color: "var(--warning)" }}>
